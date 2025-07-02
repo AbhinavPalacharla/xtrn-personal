@@ -1,0 +1,19 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    schema: "internal/db/schema.sql"
+    queries: "internal/db/query.sql"
+    gen:
+      go:
+        emit_interface: true
+        package: "db"
+        out: internal/db/sqlc
+        overrides:
+          - column: "mcp_servers.type"
+            go_type: "github.com/AbhinavPalacharla/xtrn-personal/internal/db/models.MCPServerType"
+          - column: "messages.role"
+            go_type: "github.com/AbhinavPalacharla/xtrn-personal/internal/db/models.MessageRole"
+          - column: "messages.type"
+            go_type: "github.com/AbhinavPalacharla/xtrn-personal/internal/db/models.MessageType"
+          - column: "mcp_server_images.env_schema"
+            go_type: "github.com/AbhinavPalacharla/xtrn-personal/internal/db/models.EnvSchema"
