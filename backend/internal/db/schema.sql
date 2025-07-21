@@ -2,40 +2,36 @@
 /*
 Models for storing chats
 */
-CREATE TABLE chats (
-  id TEXT PRIMARY KEY,
-  title TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE messages (
-  id TEXT PRIMARY KEY,
-  chat_id TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('USER', 'ASSISTANT')),
-  type TEXT NOT NULL CHECK (
-    type IN ('TEXT', 'TOOL_CALL_REQ', 'TOOL_CALL_RES')
-  ),
-  content TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (chat_id) REFERENCES chats (id)
-);
-
-CREATE TABLE tool_call_req (
-  message_id PRIMARY KEY,
-  tool_use_id TEXT NOT NULL, -- claude tool use ID
-  name TEXT NOT NULL,
-  arguments TEXT NOT NULL,
-  FOREIGN KEY (message_id) REFERENCES messages (id)
-);
-
-CREATE TABLE tool_call_res (
-  message_id PRIMARY KEY,
-  tool_use_id TEXT NOT NULL, -- claude tool use ID
-  content TEXT NOT NULL,
-  is_error BOOLEAN DEFAULT FALSE,
-  FOREIGN KEY (message_id) REFERENCES messages (id)
-);
-
+-- CREATE TABLE chats (
+--   id TEXT PRIMARY KEY,
+--   title TEXT,
+--   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- );
+-- CREATE TABLE messages (
+--   id TEXT PRIMARY KEY,
+--   chat_id TEXT NOT NULL,
+--   role TEXT NOT NULL CHECK (role IN ('USER', 'ASSISTANT')),
+--   type TEXT NOT NULL CHECK (
+--     type IN ('TEXT', 'TOOL_CALL_REQ', 'TOOL_CALL_RES')
+--   ),
+--   content TEXT,
+--   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--   FOREIGN KEY (chat_id) REFERENCES chats (id)
+-- );
+-- CREATE TABLE tool_call_req (
+--   message_id PRIMARY KEY,
+--   tool_use_id TEXT NOT NULL, -- claude tool use ID
+--   name TEXT NOT NULL,
+--   arguments TEXT NOT NULL,
+--   FOREIGN KEY (message_id) REFERENCES messages (id)
+-- );
+-- CREATE TABLE tool_call_res (
+--   message_id PRIMARY KEY,
+--   tool_use_id TEXT NOT NULL, -- claude tool use ID
+--   content TEXT NOT NULL,
+--   is_error BOOLEAN DEFAULT FALSE,
+--   FOREIGN KEY (message_id) REFERENCES messages (id)
+-- );
 /****************************************************/
 /*
 Possible Oauth providers
@@ -83,6 +79,7 @@ CREATE TABLE mcp_server_instances (
   slug TEXT NOT NULL,
   version INTEGER NOT NULL,
   address TEXT NOT NULL,
+  env JSON NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (slug, version) REFERENCES mcp_server_images (slug, version)
 );

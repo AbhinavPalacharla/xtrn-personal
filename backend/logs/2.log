@@ -1,0 +1,2 @@
+ERROR: 2: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:61: docker: Error response from daemon: Invalid container name (2), only [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed.
+ERROR: 2: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:61: See 'docker run --help'.

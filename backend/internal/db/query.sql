@@ -41,11 +41,15 @@ VALUES
 
 -- name: GetMCPServerImage :one
 SELECT
-  *
+  images.*,
+  providers.name as provider_name,
+  providers.client_id,
+  providers.client_secret
 FROM
-  mcp_server_images
+  mcp_server_images AS images
+  LEFT JOIN oauth_providers AS providers ON images.oauth_provider = providers.name
 WHERE
-  id = ?;
+  images.id = ?;
 
 /***********************************/
 /*
@@ -53,6 +57,6 @@ MCP Server Instance Queries
 */
 -- name: InsertMCPServerInstance :exec
 INSERT INTO
-  mcp_server_instances (id, slug, version, address, created_at)
+  mcp_server_instances (id, slug, version, address, env)
 VALUES
   (?, ?, ?, ?, ?);

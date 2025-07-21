@@ -1,0 +1,28 @@
+{
+  "name": "xmcp-test",
+  "version": "0.1.0",
+  "description": "An XMCP application with tool syntax",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "xmcp build",
+    "dev": "xmcp dev",
+    "start": "node dist/stdio.js"
+  },
+  "dependencies": {
+    "googleapis": "^153.0.0",
+    "xmcp": "^0.1.6",
+    "zod": "3.24.4"
+  },
+  "devDependencies": {
+    "swc-loader": "^0.2.6"
+  },
+  "main": "./dist/stdio.js",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "xmcp-test": "./dist/stdio.js"
+  }
+}

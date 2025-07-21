@@ -31,7 +31,7 @@ func validateEnvSchema(schema map[string]string) (bool, error) {
 }
 
 type MCPServerImage struct {
-	ID          string               `json:"id"`
+	ImageID     string               `json:"id"`
 	Slug        string               `json:"slug"`
 	Version     int                  `json:"version"`
 	Name        string               `json:"name"`
@@ -42,8 +42,8 @@ type MCPServerImage struct {
 }
 
 func saveMCPServerImageToDB(img *MCPServerImage) error {
-	err := DB.InsertMCPServerImage(context.Background(), db.InsertMCPServerImageParams{
-		ID:          img.ID,
+	return DB.InsertMCPServerImage(context.Background(), db.InsertMCPServerImageParams{
+		ID:          img.ImageID,
 		Slug:        img.Slug,
 		Version:     int64(img.Version),
 		Name:        img.Name,
@@ -55,12 +55,6 @@ func saveMCPServerImageToDB(img *MCPServerImage) error {
 		},
 		EnvSchema: img.EnvSchema,
 	})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func NewMCPServerImage(name string,
@@ -81,7 +75,7 @@ func NewMCPServerImage(name string,
 	}
 
 	s := MCPServerImage{
-		ID:          slug + "-v" + strconv.Itoa(version),
+		ImageID:     slug + "-v" + strconv.Itoa(version),
 		Slug:        slug,
 		Version:     version,
 		Name:        name,

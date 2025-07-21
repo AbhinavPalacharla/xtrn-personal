@@ -32,6 +32,7 @@ type McpServerInstance struct {
 	Slug      string
 	Version   int64
 	Address   string
+	Env       interface{}
 	CreatedAt sql.NullTime
 }
 

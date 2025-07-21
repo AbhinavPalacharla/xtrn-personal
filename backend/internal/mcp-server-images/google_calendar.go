@@ -12,12 +12,19 @@ var GoogleCalendarEnvSchema = map[string]string{
 	"WORK_CALENDAR": "",
 }
 
+// User should supply everything except the pre-filled fields
+func NewGoogleCalendarEnv(workCalendar string) map[string]string {
+	return map[string]string{
+		"WORK_CALENDAR": workCalendar,
+	}
+}
+
 func NewGoogleCalendarImage() (*types.MCPServerImage, error) {
 	img, err := types.NewMCPServerImage(
 		"Google Calendar",
 		"google-calendar",
 		1,
-		"google-calendar-mcp",
+		"google-calendar-v1",
 		models.MCPServerTypeAuthenticatedOauth,
 		"google",
 		GoogleCalendarEnvSchema,

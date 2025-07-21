@@ -9,8 +9,10 @@ import (
 )
 
 type Querier interface {
+	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
 	//*********************************
 	InsertMCPServerImage(ctx context.Context, arg InsertMCPServerImageParams) error
+	//*********************************
 	InsertMCPServerInstance(ctx context.Context, arg InsertMCPServerInstanceParams) error
 	//*********************************
 	InsertOauthProvider(ctx context.Context, arg InsertOauthProviderParams) error

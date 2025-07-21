@@ -69,8 +69,9 @@ CREATE TABLE mcp_server_instances (
   slug TEXT NOT NULL,
   version INTEGER NOT NULL,
   address TEXT NOT NULL,
+  env JSON NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (slug, version) REFERENCES mcp_servers_images (slug, version)
+  FOREIGN KEY (slug, version) REFERENCES mcp_server_images (slug, version)
 );
 
 -- +goose StatementEnd

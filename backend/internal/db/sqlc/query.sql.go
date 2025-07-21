@@ -12,9 +12,55 @@ import (
 	"github.com/AbhinavPalacharla/xtrn-personal/internal/db/models"
 )
 
+const getMCPServerImage = `-- name: GetMCPServerImage :one
+SELECT
+  images.id, images.slug, images.version, images.name, images.docker_image, images.type, images.oauth_provider, images.env_schema,
+  providers.name as provider_name,
+  providers.client_id,
+  providers.client_secret
+FROM
+  mcp_server_images AS images
+  LEFT JOIN oauth_providers AS providers ON images.oauth_provider = providers.name
+WHERE
+  images.id = ?
+`
+
+type GetMCPServerImageRow struct {
+	ID            string
+	Slug          string
+	Version       int64
+	Name          string
+	DockerImage   string
+	Type          string
+	OauthProvider sql.NullString
+	EnvSchema     models.EnvSchema
+	ProviderName  sql.NullString
+	ClientID      sql.NullString
+	ClientSecret  sql.NullString
+}
+
+func (q *Queries) GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error) {
+	row := q.db.QueryRowContext(ctx, getMCPServerImage, id)
+	var i GetMCPServerImageRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Version,
+		&i.Name,
+		&i.DockerImage,
+		&i.Type,
+		&i.OauthProvider,
+		&i.EnvSchema,
+		&i.ProviderName,
+		&i.ClientID,
+		&i.ClientSecret,
+	)
+	return i, err
+}
+
 const insertMCPServerImage = `-- name: InsertMCPServerImage :exec
 /*
-MCP Server Queries
+MCP Server Image Queries
 */
 INSERT INTO
   mcp_server_images (
@@ -58,27 +104,31 @@ func (q *Queries) InsertMCPServerImage(ctx context.Context, arg InsertMCPServerI
 }
 
 const insertMCPServerInstance = `-- name: InsertMCPServerInstance :exec
+/*
+MCP Server Instance Queries
+*/
 INSERT INTO
-  mcp_server_instances (id, slug, version, address, created_at)
+  mcp_server_instances (id, slug, version, address, env)
 VALUES
   (?, ?, ?, ?, ?)
 `
 
 type InsertMCPServerInstanceParams struct {
-	ID        string
-	Slug      string
-	Version   int64
-	Address   string
-	CreatedAt sql.NullTime
+	ID      string
+	Slug    string
+	Version int64
+	Address string
+	Env     interface{}
 }
 
+// *********************************
 func (q *Queries) InsertMCPServerInstance(ctx context.Context, arg InsertMCPServerInstanceParams) error {
 	_, err := q.db.ExecContext(ctx, insertMCPServerInstance,
 		arg.ID,
 		arg.Slug,
 		arg.Version,
 		arg.Address,
-		arg.CreatedAt,
+		arg.Env,
 	)
 	return err
 }

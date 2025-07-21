@@ -1,6 +1,7 @@
 # Project configuration
 CMD_DIR := cmd
 BIN_DIR := bin
+LOG_DIR := logs
 DB_PATH := internal/db/db.db
 MIGRATIONS_DIR := internal/db/migrations
 SCHEMA_PATH := internal/db/schema.sql
@@ -11,6 +12,7 @@ SCHEMA_PATH := internal/db/schema.sql
 setup-env:
 	@echo "export ENV_PATH=$(CURDIR)/.env"
 	@echo "export BIN_DIR=$(CURDIR)/$(BIN_DIR)"
+	@echo "export LOG_DIR=$(CURDIR)/$(LOG_DIR)"
 
 # Build specific binary (e.g., make build-create-mcp-client-instance)
 build-%:

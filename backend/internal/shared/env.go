@@ -24,6 +24,16 @@ func LoadEnv() (bool, error) {
 	return true, nil
 }
 
+func GetEnv(name string) (string, error) {
+	value := os.Getenv(name)
+
+	if value == "" {
+		return "", fmt.Errorf("`%s` env variable not defined", name)
+	}
+
+	return value, nil
+}
+
 func init() {
 	if ok, err := LoadEnv(); !ok {
 		panic(err)
