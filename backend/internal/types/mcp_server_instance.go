@@ -122,7 +122,15 @@ func NewMCPServerInstace(imageID string, userEnv map[string]string) (*MCPServerI
 			instanceEnv[k] = img.ClientSecret.String
 		} else if v == "$user.oauth_refresh_token" {
 			// instanceEnv[k] = "somerefreshtoken123"
-			instanceEnv[k] = GOOGLE_REFRESH_TOKEN //TODO: Change to goth eventually
+			// instanceEnv[k] = GOOGLE_REFRESH_TOKEN //TODO: Change to goth eventually
+
+			//Get refresh token
+			token, err := DB.GetOauthTokenByProvider(context.Background(), img.OauthProvider.String)
+			if err != nil {
+				return nil, err
+			}
+
+			instanceEnv[k] = token.RefreshToken
 		} else {
 			//If not template then see if it is in userEnv if not then invalid user schema
 
@@ -143,7 +151,6 @@ func NewMCPServerInstace(imageID string, userEnv map[string]string) (*MCPServerI
 		},
 		InstanceID:  instID,
 		InstanceEnv: instanceEnv,
-		Address:     "someaddress",
 	}
 
 	// fmt.Printf("%#v\n", inst)

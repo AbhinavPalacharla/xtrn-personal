@@ -1,65 +1,32 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
-	"os"
 
+	db "github.com/AbhinavPalacharla/xtrn-personal/internal/db/sqlc"
+	oauth_provider "github.com/AbhinavPalacharla/xtrn-personal/internal/oauth-provider"
 	. "github.com/AbhinavPalacharla/xtrn-personal/internal/shared"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
-	"github.com/markbates/goth/providers/google"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 )
+
+var googleSignin = oauth_provider.GoogleSigninOauthProvider
+var googleCalendar = oauth_provider.GoogleCalendarOauthProvider
 
 type Server struct {
 	sessionStore *sessions.CookieStore
 }
 
-type Provider struct {
-	name         string
-	clientID     string
-	clientSecret string
-	callbackURL  string
-	scopes       []string
-	NewProvider  func(name string, clientID string, clientSecret string, callbackURL string, scopes ...string) *goth.Provider
-}
-
 func ConfigureGoth(s *Server) error {
-	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
-	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
-
-	if googleClientID == "" {
-		return fmt.Errorf("`GOOGLE_CLIENT_ID` env variable not defined")
-	}
-
-	if googleClientSecret == "" {
-		return fmt.Errorf("`GOOGLE_CLIENT_SECRET` env variable not defined")
-	}
-
-	googleSignIn := google.New(
-		googleClientID,
-		googleClientSecret,
-		"http://localhost:8080/auth/google-signin/callback",
-		"email", "profile",
-	)
-	googleSignIn.SetAccessType("offline")
-	googleSignIn.SetPrompt("consent")
-	googleSignIn.SetName("google-signin")
-
-	googleCalendar := google.New(
-		googleClientID,
-		googleClientSecret,
-		"http://localhost:8080/auth/google-calendar/callback",
-		"email", "profile", "https://www.googleapis.com/auth/calendar",
-	)
-	googleCalendar.SetAccessType("offline")
-	googleCalendar.SetPrompt("consent")
-	googleCalendar.SetName("google-calendar")
 
 	goth.UseProviders(
-		googleSignIn,
-		googleCalendar,
+		googleSignin.GothProvider,
+		googleCalendar.GothProvider,
 	)
 
 	gothic.Store = s.sessionStore
@@ -89,10 +56,35 @@ func NewServer() (*Server, error) {
 	return &s, nil
 }
 
-func handleCallbackHandler(provider string) http.HandlerFunc {
+func storeOauthToken(providerName string, refreshToken string) error {
+	_, err := DB.GetOauthTokenByProvider(context.Background(), providerName)
+	if err == sql.ErrNoRows {
+		//Token does not exist so insert
+		id, _ := gonanoid.New()
+		err := DB.InsertOauthToken(context.Background(), db.InsertOauthTokenParams{
+			ID:            id,
+			RefreshToken:  refreshToken,
+			OauthProvider: providerName,
+		})
+
+		if err != nil {
+			return err
+		}
+	}
+
+	//Token does exist so update it
+	err = DB.UpdateOauthTokenByProivder(context.Background(), db.UpdateOauthTokenByProivderParams{
+		RefreshToken:  refreshToken,
+		OauthProvider: providerName,
+	})
+
+	return err
+}
+
+func handleCallbackHandler(providerName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		q.Set("provider", provider)
+		q.Set("provider", providerName)
 		r.URL.RawQuery = q.Encode()
 
 		user, err := gothic.CompleteUserAuth(w, r)
@@ -113,17 +105,27 @@ func handleCallbackHandler(provider string) http.HandlerFunc {
 		fmt.Printf("Access Token: %s\n", user.AccessToken)
 		fmt.Printf("Refresh Token: %s\n", user.RefreshToken)
 		fmt.Print("==========================================================\n")
+
+		storeOauthToken(providerName, user.RefreshToken)
 	}
 }
 
-func beginAuthHandler(provider string) http.HandlerFunc {
+func beginAuthHandler(providerName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		q.Set("provider", provider)
+		q.Set("provider", providerName)
 		r.URL.RawQuery = q.Encode()
 
 		gothic.BeginAuthHandler(w, r)
 	}
+}
+
+func createOauthHandlers(providerName string) {
+	route := "/auth/" + providerName
+	callbackRoute := "/auth/" + providerName + "/callback"
+
+	http.HandleFunc(route, beginAuthHandler(providerName))
+	http.HandleFunc(callbackRoute, handleCallbackHandler(providerName))
 }
 
 func main() {
@@ -134,11 +136,15 @@ func main() {
 		StdErrLogger.Panicf("%v", err)
 	}
 
+	fmt.Println(googleSignin.Name, googleCalendar.Name)
+
 	// Routes
-	http.HandleFunc("/auth/google-signin", beginAuthHandler("google-signin"))
-	http.HandleFunc("/auth/google-calendar", beginAuthHandler("google-calendar"))
-	http.HandleFunc("/auth/google-signin/callback", handleCallbackHandler("google-signin"))
-	http.HandleFunc("/auth/google-calendar/callback", handleCallbackHandler("google-calendar"))
+	createOauthHandlers(googleSignin.Name)
+	createOauthHandlers(googleCalendar.Name)
+	// http.HandleFunc("/auth/google-signin", beginAuthHandler("google-signin"))
+	// http.HandleFunc("/auth/google-calendar", beginAuthHandler("google-calendar"))
+	// http.HandleFunc("/auth/google-signin/callback", handleCallbackHandler("google-signin"))
+	// http.HandleFunc("/auth/google-calendar/callback", handleCallbackHandler("google-calendar"))
 
 	fmt.Println("Open one of these in your browser:")
 	fmt.Println("  http://localhost:8080/auth/google-signin")

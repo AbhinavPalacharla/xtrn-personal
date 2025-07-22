@@ -26,7 +26,7 @@ func NewGoogleCalendarImage() (*types.MCPServerImage, error) {
 		1,
 		"google-calendar-v1",
 		models.MCPServerTypeAuthenticatedOauth,
-		"google",
+		"google-calendar",
 		GoogleCalendarEnvSchema,
 	)
 

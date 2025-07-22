@@ -4,17 +4,12 @@ import (
 	"fmt"
 
 	oauth_provider "github.com/AbhinavPalacharla/xtrn-personal/internal/oauth-provider"
-	. "github.com/AbhinavPalacharla/xtrn-personal/internal/shared"
 )
 
 func main() {
-	googleOauthProvider, err := oauth_provider.NewGoogleOauthProvider()
+	oauth_provider.GoogleCalendarOauthProvider.StoreOauthProvider()
 
-	if err != nil {
-		StdErrLogger.Fatal(err)
-	} else {
-		fmt.Print("✅ Created Google OAuth Provider\n")
-	}
+	oauth_provider.GoogleSigninOauthProvider.StoreOauthProvider()
 
-	_ = googleOauthProvider
+	fmt.Print("✅ Created Google OAuth Provider\n")
 }

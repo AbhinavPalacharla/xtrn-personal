@@ -1,3 +1,0 @@
-ERROR: 12345: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:59: Unable to find image 'airbnb:latest' locally
-ERROR: 12345: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:59: docker: Error response from daemon: pull access denied for airbnb, repository does not exist or may require 'docker login': denied: requested access to the resource is denied.
-ERROR: 12345: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:59: See 'docker run --help'.

@@ -39,7 +39,9 @@ Possible Oauth providers
 CREATE TABLE oauth_providers (
   name TEXT PRIMARY KEY,
   client_id TEXT NOT NULL,
-  client_secret TEXT NOT NULL
+  client_secret TEXT NOT NULL,
+  callback_url TEXT NOT NULL,
+  scopes TEXT
 );
 
 /*
@@ -47,9 +49,7 @@ User token attached to an oauth provider
 */
 CREATE TABLE oauth_tokens (
   id TEXT PRIMARY KEY,
-  access_token TEXT UNIQUE NOT NULL,
   refresh_token TEXT UNIQUE NOT NULL,
-  expiry TEXT NOT NULL,
   oauth_provider TEXT NOT NULL,
   FOREIGN KEY (oauth_provider) REFERENCES oauth_providers (name)
 );

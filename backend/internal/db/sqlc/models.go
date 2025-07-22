@@ -10,12 +10,6 @@ import (
 	"github.com/AbhinavPalacharla/xtrn-personal/internal/db/models"
 )
 
-type Chat struct {
-	ID        string
-	Title     sql.NullString
-	CreatedAt sql.NullTime
-}
-
 type McpServerImage struct {
 	ID            string
 	Slug          string
@@ -36,39 +30,16 @@ type McpServerInstance struct {
 	CreatedAt sql.NullTime
 }
 
-type Message struct {
-	ID        string
-	ChatID    string
-	Role      models.MessageRole
-	Type      models.MessageType
-	Content   sql.NullString
-	CreatedAt sql.NullTime
-}
-
 type OauthProvider struct {
 	Name         string
 	ClientID     string
 	ClientSecret string
+	CallbackUrl  string
+	Scopes       sql.NullString
 }
 
 type OauthToken struct {
 	ID            string
-	AccessToken   string
 	RefreshToken  string
-	Expiry        string
 	OauthProvider string
-}
-
-type ToolCallRe struct {
-	MessageID interface{}
-	ToolUseID string
-	Content   string
-	IsError   sql.NullBool
-}
-
-type ToolCallReq struct {
-	MessageID interface{}
-	ToolUseID string
-	Name      string
-	Arguments string
 }

@@ -1,2 +1,0 @@
-ERROR: google-calendar-v1-inst-UFqXM1hy6ZM6We9Q6NcEP: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:82: docker: invalid reference format: repository name (library/CLIENT_ID) must be lowercase.
-ERROR: google-calendar-v1-inst-UFqXM1hy6ZM6We9Q6NcEP: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:82: See 'docker run --help'.

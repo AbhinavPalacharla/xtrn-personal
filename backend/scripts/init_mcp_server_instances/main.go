@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	mcp_server_images "github.com/AbhinavPalacharla/xtrn-personal/internal/mcp-server-images"
-	mcp_server_instances "github.com/AbhinavPalacharla/xtrn-personal/internal/mcp-server-instance"
+	mcp_server_instances "github.com/AbhinavPalacharla/xtrn-personal/internal/mcp-server-instances"
 	. "github.com/AbhinavPalacharla/xtrn-personal/internal/shared"
 )
 

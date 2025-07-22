@@ -1,2 +1,0 @@
-ERROR: google-calendar-v1-inst-x_4oi7Tra2bXNYHLoFzsm: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:82: docker: invalid reference format.
-ERROR: google-calendar-v1-inst-x_4oi7Tra2bXNYHLoFzsm: /Users/abhinav/Documents/projects/MCP/xtrn-personal/backend/internal/new-mcp-instance/client.go:82: See 'docker run --help'.

@@ -18,6 +18,8 @@ const MAX_TOOL_USE_TIME = time.Second * 20
 func (s *HTTPServer) handleListTools(w http.ResponseWriter, r *http.Request) {
 	tools, err := s.app.InstanceClient.ListTools(context.Background(), mcp.ListToolsRequest{})
 
+	s.app.ErrLogger.Print("TOOL LIST REQUEST RECIEVED")
+
 	if err != nil {
 		shared.HTTPReturnError(w, ErrorOptions{
 			Err: fmt.Sprintf("Failed to list tools - %v", err),
@@ -52,6 +54,9 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+
+	s.app.ErrLogger.Println("TOOL CALL REQUEST RECIEVED")
+	s.app.ErrLogger.Println(req)
 
 	toolCallRequest := mcp.CallToolRequest{}
 	toolCallRequest.Params.Name = req.Name

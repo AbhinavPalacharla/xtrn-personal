@@ -58,6 +58,22 @@ func (q *Queries) GetMCPServerImage(ctx context.Context, id string) (GetMCPServe
 	return i, err
 }
 
+const getOauthTokenByProvider = `-- name: GetOauthTokenByProvider :one
+SELECT
+  id, refresh_token, oauth_provider
+FROM
+  oauth_tokens
+WHERE
+  oauth_tokens.oauth_provider = ?
+`
+
+func (q *Queries) GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error) {
+	row := q.db.QueryRowContext(ctx, getOauthTokenByProvider, oauthProvider)
+	var i OauthToken
+	err := row.Scan(&i.ID, &i.RefreshToken, &i.OauthProvider)
+	return i, err
+}
+
 const insertMCPServerImage = `-- name: InsertMCPServerImage :exec
 /*
 MCP Server Image Queries
@@ -138,51 +154,69 @@ const insertOauthProvider = `-- name: InsertOauthProvider :exec
 OAUTH token queries
 */
 INSERT INTO
-  oauth_providers (name, client_id, client_secret)
+  oauth_providers (
+    name,
+    client_id,
+    client_secret,
+    callback_url,
+    scopes
+  )
 VALUES
-  (?, ?, ?)
+  (?, ?, ?, ?, ?)
 `
 
 type InsertOauthProviderParams struct {
 	Name         string
 	ClientID     string
 	ClientSecret string
+	CallbackUrl  string
+	Scopes       sql.NullString
 }
 
 // *********************************
 func (q *Queries) InsertOauthProvider(ctx context.Context, arg InsertOauthProviderParams) error {
-	_, err := q.db.ExecContext(ctx, insertOauthProvider, arg.Name, arg.ClientID, arg.ClientSecret)
+	_, err := q.db.ExecContext(ctx, insertOauthProvider,
+		arg.Name,
+		arg.ClientID,
+		arg.ClientSecret,
+		arg.CallbackUrl,
+		arg.Scopes,
+	)
 	return err
 }
 
 const insertOauthToken = `-- name: InsertOauthToken :exec
 INSERT INTO
-  oauth_tokens (
-    id,
-    access_token,
-    refresh_token,
-    expiry,
-    oauth_provider
-  )
+  oauth_tokens (id, refresh_token, oauth_provider)
 VALUES
-  (?, ?, ?, ?, ?)
+  (?, ?, ?)
 `
 
 type InsertOauthTokenParams struct {
 	ID            string
-	AccessToken   string
 	RefreshToken  string
-	Expiry        string
 	OauthProvider string
 }
 
 func (q *Queries) InsertOauthToken(ctx context.Context, arg InsertOauthTokenParams) error {
-	_, err := q.db.ExecContext(ctx, insertOauthToken,
-		arg.ID,
-		arg.AccessToken,
-		arg.RefreshToken,
-		arg.Expiry,
-		arg.OauthProvider,
-	)
+	_, err := q.db.ExecContext(ctx, insertOauthToken, arg.ID, arg.RefreshToken, arg.OauthProvider)
+	return err
+}
+
+const updateOauthTokenByProivder = `-- name: UpdateOauthTokenByProivder :exec
+UPDATE oauth_tokens
+SET
+  refresh_token = ?
+WHERE
+  oauth_provider = ?
+`
+
+type UpdateOauthTokenByProivderParams struct {
+	RefreshToken  string
+	OauthProvider string
+}
+
+func (q *Queries) UpdateOauthTokenByProivder(ctx context.Context, arg UpdateOauthTokenByProivderParams) error {
+	_, err := q.db.ExecContext(ctx, updateOauthTokenByProivder, arg.RefreshToken, arg.OauthProvider)
 	return err
 }

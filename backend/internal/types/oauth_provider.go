@@ -2,42 +2,57 @@ package types
 
 import (
 	"context"
-	"fmt"
+	"database/sql"
+	"encoding/json"
 
 	db "github.com/AbhinavPalacharla/xtrn-personal/internal/db/sqlc"
 	. "github.com/AbhinavPalacharla/xtrn-personal/internal/shared"
+	"github.com/markbates/goth"
 )
 
 type OauthProvider struct {
-	Name         string `json:"name"`
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
+	Name         string
+	ClientID     string
+	ClientSecret string
+	CallbackURL  string
+	Scopes       []string
+	GothProvider goth.Provider
 }
 
-func saveOauthProviderToDB(prov *OauthProvider) error {
-	err := DB.InsertOauthProvider(context.TODO(), db.InsertOauthProviderParams{
-		Name:         prov.Name,
-		ClientID:     prov.ClientID,
-		ClientSecret: prov.ClientSecret,
+func (p *OauthProvider) StoreOauthProvider() {
+
+	DB.InsertOauthProvider(context.Background(), db.InsertOauthProviderParams{
+		Name:         p.Name,
+		ClientID:     p.ClientID,
+		ClientSecret: p.ClientSecret,
+		CallbackUrl:  p.CallbackURL,
+		Scopes: sql.NullString{
+			String: func() string {
+				jsonBytes, _ := json.Marshal(p.Scopes)
+
+				return string(jsonBytes)
+			}(),
+			Valid: len(p.Scopes) > 0,
+		},
 	})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
-func NewOauthProvider(name string, clientId string, clientSecret string) (*OauthProvider, error) {
+func NewOauthProvider(
+	name string,
+	clientID string,
+	clientSecret string,
+	callbackURL string,
+	scopes []string,
+	newGothProvider func() goth.Provider,
+) *OauthProvider {
 	p := OauthProvider{
 		Name:         name,
-		ClientID:     clientId,
+		ClientID:     clientID,
 		ClientSecret: clientSecret,
+		CallbackURL:  callbackURL,
+		Scopes:       scopes,
+		GothProvider: newGothProvider(),
 	}
 
-	if err := saveOauthProviderToDB(&p); err != nil {
-		return nil, fmt.Errorf("Failed to save provider to DB - %w\n", err)
-	}
-
-	return &p, nil
+	return &p
 }

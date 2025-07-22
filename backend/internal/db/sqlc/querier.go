@@ -10,6 +10,7 @@ import (
 
 type Querier interface {
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
+	GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error)
 	//*********************************
 	InsertMCPServerImage(ctx context.Context, arg InsertMCPServerImageParams) error
 	//*********************************
@@ -17,6 +18,7 @@ type Querier interface {
 	//*********************************
 	InsertOauthProvider(ctx context.Context, arg InsertOauthProviderParams) error
 	InsertOauthToken(ctx context.Context, arg InsertOauthTokenParams) error
+	UpdateOauthTokenByProivder(ctx context.Context, arg UpdateOauthTokenByProivderParams) error
 }
 
 var _ Querier = (*Queries)(nil)

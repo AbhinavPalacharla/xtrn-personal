@@ -4,21 +4,36 @@ OAUTH token queries
 */
 -- name: InsertOauthProvider :exec
 INSERT INTO
-  oauth_providers (name, client_id, client_secret)
-VALUES
-  (?, ?, ?);
-
--- name: InsertOauthToken :exec
-INSERT INTO
-  oauth_tokens (
-    id,
-    access_token,
-    refresh_token,
-    expiry,
-    oauth_provider
+  oauth_providers (
+    name,
+    client_id,
+    client_secret,
+    callback_url,
+    scopes
   )
 VALUES
   (?, ?, ?, ?, ?);
+
+-- name: InsertOauthToken :exec
+INSERT INTO
+  oauth_tokens (id, refresh_token, oauth_provider)
+VALUES
+  (?, ?, ?);
+
+-- name: GetOauthTokenByProvider :one
+SELECT
+  *
+FROM
+  oauth_tokens
+WHERE
+  oauth_tokens.oauth_provider = ?;
+
+-- name: UpdateOauthTokenByProivder :exec
+UPDATE oauth_tokens
+SET
+  refresh_token = ?
+WHERE
+  oauth_provider = ?;
 
 /***********************************/
 /*
