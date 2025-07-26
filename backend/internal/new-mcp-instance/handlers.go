@@ -181,6 +181,3 @@ func (s *HTTPServer) handleKill(w http.ResponseWriter, r *http.Request) {
 
 	DB.DeleteMCPServerInstance(context.Background(), s.app.InstanceID)
 }
-func (s *HTTPServer) handleSetRefresh(w http.ResponseWriter, r *http.Request) {
-
-}

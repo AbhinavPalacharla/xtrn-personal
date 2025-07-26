@@ -22,7 +22,6 @@ func (s *HTTPServer) StartServer() error {
 	mux.HandleFunc("/listTools", s.handleListTools)
 	mux.HandleFunc("/callTool", s.handleCallTool)
 	mux.HandleFunc("/kill", s.handleKill)
-	mux.HandleFunc("/set-refresh", s.handleSetRefresh)
 
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
