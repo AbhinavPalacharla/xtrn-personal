@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { type InferSchema } from "xmcp";
-import { calendar, calendarId } from "../auth";
+import { googleOauthClient } from "../auth";
+import { google } from "googleapis";
+import { isAppError, AppError, NewMCPError, NewMCPResponse } from "../utils/error";
 
 export const schema = {
   summary: z.string().describe("Event title"),
@@ -27,17 +29,27 @@ export const metadata = {
 };
 
 export default async function createEvent(args: InferSchema<typeof schema>) {
-  const res = await calendar.events.insert({
-    calendarId,
-    requestBody: args,
-  });
+  try {
+    const client = await googleOauthClient();
+    const calendar = google.calendar({ version: "v3", auth: client });
 
-  return {
-    content: [
-      {
-        type: "text",
-        text: `Event created with ID: ${res.data.id}`,
-      },
-    ],
-  };
+    const res = await calendar.events.insert({
+      calendarId: "primary",
+      requestBody: args,
+    });
+
+    return NewMCPResponse({
+      is_error: false,
+      content: [
+        {
+          type: "text",
+          text: `Event created with ID: ${res.data.id}`,
+        },
+      ],
+    });
+  } catch (e: any) {
+    if (isAppError(e)) {
+      return NewMCPError(e.type, e.message);
+    }
+  }
 }

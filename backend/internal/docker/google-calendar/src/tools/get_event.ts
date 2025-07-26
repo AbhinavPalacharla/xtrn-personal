@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type InferSchema } from "xmcp";
-import { calendar, calendarId } from "../auth";
+import { googleOauthClient } from "../auth";
+import { google } from "googleapis";
 
 export const schema = {
   eventId: z.string().describe("ID of the event to retrieve"),
@@ -17,8 +18,11 @@ export const metadata = {
 };
 
 export default async function getEvent(args: InferSchema<typeof schema>) {
+  const client = await googleOauthClient();
+  const calendar = google.calendar({ version: "v3", auth: client });
+
   const res = await calendar.events.get({
-    calendarId,
+    calendarId: "primary",
     eventId: args.eventId,
   });
 

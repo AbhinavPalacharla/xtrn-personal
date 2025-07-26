@@ -12,6 +12,17 @@ import (
 	"github.com/AbhinavPalacharla/xtrn-personal/internal/db/models"
 )
 
+const deleteMCPServerInstance = `-- name: DeleteMCPServerInstance :exec
+DELETE FROM mcp_server_instances
+WHERE
+  id = ?
+`
+
+func (q *Queries) DeleteMCPServerInstance(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteMCPServerInstance, id)
+	return err
+}
+
 const getMCPServerImage = `-- name: GetMCPServerImage :one
 SELECT
   images.id, images.slug, images.version, images.name, images.docker_image, images.type, images.oauth_provider, images.env_schema,

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type InferSchema } from "xmcp";
-import { calendar, calendarId } from "../auth";
+import { googleOauthClient } from "../auth";
+import { google } from "googleapis";
 
 export const schema = {
   timeMin: z.string().describe("Start of time range (ISO format)"),
@@ -20,8 +21,11 @@ export const metadata = {
 };
 
 export default async function listEvents(args: InferSchema<typeof schema>) {
+  const client = await googleOauthClient();
+  const calendar = google.calendar({ version: "v3", auth: client });
+
   const res = await calendar.events.list({
-    calendarId,
+    calendarId: "primary",
     timeMin: args.timeMin,
     timeMax: args.timeMax,
     maxResults: args.maxResults ?? 10,

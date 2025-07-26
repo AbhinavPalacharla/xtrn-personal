@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	DeleteMCPServerInstance(ctx context.Context, id string) error
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
 	GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error)
 	//*********************************

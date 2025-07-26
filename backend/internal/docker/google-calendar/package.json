@@ -11,6 +11,7 @@
     "start": "node dist/stdio.js"
   },
   "dependencies": {
+    "google-auth-library": "^10.1.0",
     "googleapis": "^153.0.0",
     "xmcp": "^0.1.6",
     "zod": "3.24.4"

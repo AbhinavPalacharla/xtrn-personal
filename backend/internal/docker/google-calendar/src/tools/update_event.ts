@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type InferSchema } from "xmcp";
-import { calendar, calendarId } from "../auth";
+import { googleOauthClient } from "../auth";
+import { google } from "googleapis";
 
 export const schema = {
   eventId: z.string().describe("ID of the event to update"),
@@ -34,8 +35,11 @@ export const metadata = {
 export default async function updateEvent(args: InferSchema<typeof schema>) {
   const { eventId, ...updates } = args;
 
+  const client = await googleOauthClient();
+  const calendar = google.calendar({ version: "v3", auth: client });
+
   const res = await calendar.events.patch({
-    calendarId,
+    calendarId: "primary",
     eventId,
     requestBody: updates,
   });

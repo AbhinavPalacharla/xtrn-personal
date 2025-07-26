@@ -75,3 +75,8 @@ INSERT INTO
   mcp_server_instances (id, slug, version, address, env)
 VALUES
   (?, ?, ?, ?, ?);
+
+-- name: DeleteMCPServerInstance :exec
+DELETE FROM mcp_server_instances
+WHERE
+  id = ?;

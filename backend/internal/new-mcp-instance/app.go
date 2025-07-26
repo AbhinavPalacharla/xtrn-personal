@@ -3,6 +3,7 @@ package new_mcp_instance
 import (
 	"fmt"
 	"log"
+	"net"
 
 	"github.com/mark3labs/mcp-go/client"
 )
@@ -16,6 +17,7 @@ type App struct {
 	Logger          *log.Logger       //runtime
 	ErrLogger       *log.Logger       //runtime
 	InstanceClient  *client.Client    //runtime
+	Listener        net.Listener      //runtime
 }
 
 func NewApp() (*App, error) {
