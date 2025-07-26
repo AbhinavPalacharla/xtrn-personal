@@ -1,5 +1,5 @@
 *.env
-backend/internabl/db/db.db
+backend/internal/db/db.db
 backend/logs/*
 notes.md
 
