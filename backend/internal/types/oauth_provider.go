@@ -21,7 +21,7 @@ type OauthProvider struct {
 
 func (p *OauthProvider) StoreOauthProvider() {
 
-	DB.InsertOauthProvider(context.Background(), db.InsertOauthProviderParams{
+	Q.InsertOauthProvider(context.Background(), db.InsertOauthProviderParams{
 		Name:         p.Name,
 		ClientID:     p.ClientID,
 		ClientSecret: p.ClientSecret,

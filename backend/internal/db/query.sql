@@ -76,6 +76,12 @@ INSERT INTO
 VALUES
   (?, ?, ?, ?, ?);
 
+-- name: InsertMCPServerInstanceTool :exec
+INSERT INTO
+  mcp_server_tools (id, name, description, schema, image_id)
+VALUES
+  (?, ?, ?, ?, ?);
+
 -- name: DeleteMCPServerInstance :exec
 DELETE FROM mcp_server_instances
 WHERE

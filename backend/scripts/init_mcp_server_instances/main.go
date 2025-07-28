@@ -13,7 +13,7 @@ func main() {
 	googleCalendarInstance, err := mcp_server_instances.NewGoogleCalendarInstance(googleCalendarEnv)
 
 	if err != nil {
-		StdErrLogger.Fatal(err)
+		StdErrLogger.Fatal(fmt.Errorf("%w", err))
 	} else {
 		fmt.Printf("✅ Created Google Calendar Instance %v: 🚀%s\n", googleCalendarInstance.InstanceID, googleCalendarInstance.Address)
 	}

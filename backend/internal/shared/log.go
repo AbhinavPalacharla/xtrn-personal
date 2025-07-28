@@ -30,10 +30,23 @@ func NewMCPInstanceLogger(instanceID string) MCPInstanceLoggers {
 	l := log.New(logFile, fmt.Sprintf("%s: ", instanceID), log.Llongfile)
 	el := log.New(logFile, fmt.Sprintf("ERROR: %s: ", instanceID), log.Llongfile)
 
-	instanceLogger := MCPInstanceLoggers{
+	return MCPInstanceLoggers{
 		Logger:    l,
 		ErrLogger: el,
 	}
+}
 
-	return instanceLogger
+type APILoggers struct {
+	Logger    *log.Logger
+	ErrLogger *log.Logger
+}
+
+func NewAPILoggers() APILoggers {
+	l := log.New(os.Stdout, fmt.Sprintf("API"), log.Llongfile)
+	el := log.New(os.Stderr, fmt.Sprintf("ERROR: API: "), log.Llongfile)
+
+	return APILoggers{
+		Logger:    l,
+		ErrLogger: el,
+	}
 }

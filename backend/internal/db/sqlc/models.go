@@ -30,6 +30,14 @@ type McpServerInstance struct {
 	CreatedAt sql.NullTime
 }
 
+type McpServerTool struct {
+	ID          string
+	Name        string
+	Description sql.NullString
+	Schema      string
+	ImageID     string
+}
+
 type OauthProvider struct {
 	Name         string
 	ClientID     string

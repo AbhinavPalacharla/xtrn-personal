@@ -8,7 +8,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var DB *db.Queries
+var DB *sql.DB
+var Q *db.Queries
 
 func init() {
 	if ok, err := LoadEnv(); !ok {
@@ -22,12 +23,12 @@ func init() {
 	}
 
 	conn, err := sql.Open("sqlite3", dbURL)
-
 	if err != nil {
 		StdErrLogger.Fatalf("Failed to connect to DB at %s - %v\n", dbURL, err)
 	}
 
-	DB = db.New(conn)
+	DB = conn
+	Q = db.New(conn)
 
 	// fmt.Print("✅ DB Connection initialized\n")
 }

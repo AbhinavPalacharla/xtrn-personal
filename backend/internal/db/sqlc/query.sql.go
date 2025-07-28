@@ -160,6 +160,32 @@ func (q *Queries) InsertMCPServerInstance(ctx context.Context, arg InsertMCPServ
 	return err
 }
 
+const insertMCPServerInstanceTool = `-- name: InsertMCPServerInstanceTool :exec
+INSERT INTO
+  mcp_server_tools (id, name, description, schema, image_id)
+VALUES
+  (?, ?, ?, ?, ?)
+`
+
+type InsertMCPServerInstanceToolParams struct {
+	ID          string
+	Name        string
+	Description sql.NullString
+	Schema      string
+	ImageID     string
+}
+
+func (q *Queries) InsertMCPServerInstanceTool(ctx context.Context, arg InsertMCPServerInstanceToolParams) error {
+	_, err := q.db.ExecContext(ctx, insertMCPServerInstanceTool,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.Schema,
+		arg.ImageID,
+	)
+	return err
+}
+
 const insertOauthProvider = `-- name: InsertOauthProvider :exec
 /*
 OAUTH token queries

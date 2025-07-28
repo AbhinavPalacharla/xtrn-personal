@@ -60,7 +60,7 @@ mcp_servers is a list of possible MCP servers that can exist.
 Must create an instance to use the server
 */
 CREATE TABLE mcp_server_images (
-  id TEXT NOT NULL,
+  id TEXT UNIQUE NOT NULL,
   slug TEXT NOT NULL,
   version INTEGER NOT NULL,
   name TEXT NOT NULL,
@@ -72,6 +72,15 @@ CREATE TABLE mcp_server_images (
   env_schema JSON NOT NULL,
   PRIMARY KEY (slug, version),
   FOREIGN KEY (oauth_provider) REFERENCES oauth_providers (name)
+);
+
+CREATE TABLE mcp_server_tools (
+  id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  schema TEXT NOT NULL,
+  image_id TEXT NOT NULL,
+  FOREIGN KEY (image_id) REFERENCES mcp_server_images (id)
 );
 
 CREATE TABLE mcp_server_instances (

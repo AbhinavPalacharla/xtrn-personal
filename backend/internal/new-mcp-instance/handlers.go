@@ -179,5 +179,5 @@ func (s *HTTPServer) handleKill(w http.ResponseWriter, r *http.Request) {
 
 	s.app.Listener.Close()
 
-	DB.DeleteMCPServerInstance(context.Background(), s.app.InstanceID)
+	Q.DeleteMCPServerInstance(context.Background(), s.app.InstanceID)
 }

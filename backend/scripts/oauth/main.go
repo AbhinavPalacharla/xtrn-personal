@@ -57,11 +57,11 @@ func NewServer() (*Server, error) {
 }
 
 func storeOauthToken(providerName string, refreshToken string) error {
-	_, err := DB.GetOauthTokenByProvider(context.Background(), providerName)
+	_, err := Q.GetOauthTokenByProvider(context.Background(), providerName)
 	if err == sql.ErrNoRows {
 		//Token does not exist so insert
 		id, _ := gonanoid.New()
-		err := DB.InsertOauthToken(context.Background(), db.InsertOauthTokenParams{
+		err := Q.InsertOauthToken(context.Background(), db.InsertOauthTokenParams{
 			ID:            id,
 			RefreshToken:  refreshToken,
 			OauthProvider: providerName,
@@ -73,7 +73,7 @@ func storeOauthToken(providerName string, refreshToken string) error {
 	}
 
 	//Token does exist so update it
-	err = DB.UpdateOauthTokenByProivder(context.Background(), db.UpdateOauthTokenByProivderParams{
+	err = Q.UpdateOauthTokenByProivder(context.Background(), db.UpdateOauthTokenByProivderParams{
 		RefreshToken:  refreshToken,
 		OauthProvider: providerName,
 	})

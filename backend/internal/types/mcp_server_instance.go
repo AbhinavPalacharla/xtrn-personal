@@ -24,7 +24,7 @@ type MCPServerInstance struct {
 const GOOGLE_REFRESH_TOKEN = ""
 
 func saveMCPServerInstanceToDB(inst *MCPServerInstance) error {
-	return DB.InsertMCPServerInstance(context.Background(), db.InsertMCPServerInstanceParams{
+	return Q.InsertMCPServerInstance(context.Background(), db.InsertMCPServerInstanceParams{
 		ID:      inst.InstanceID,
 		Slug:    inst.Slug,
 		Version: int64(inst.Version),
@@ -101,7 +101,7 @@ func startMCPServerInstance(inst *MCPServerInstance) error {
 
 func NewMCPServerInstace(imageID string, userEnv map[string]string) (*MCPServerInstance, error) {
 
-	img, err := DB.GetMCPServerImage(context.Background(), imageID)
+	img, err := Q.GetMCPServerImage(context.Background(), imageID)
 	fmt.Printf("IMAGE: %v", img)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func NewMCPServerInstace(imageID string, userEnv map[string]string) (*MCPServerI
 			// instanceEnv[k] = GOOGLE_REFRESH_TOKEN //TODO: Change to goth eventually
 
 			//Get refresh token
-			token, err := DB.GetOauthTokenByProvider(context.Background(), img.OauthProvider.String)
+			token, err := Q.GetOauthTokenByProvider(context.Background(), img.OauthProvider.String)
 			if err != nil {
 				return nil, err
 			}
