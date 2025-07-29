@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,6 +84,31 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.Logger.Printf("MESSAGE RECIEVED: %s\n", msg.Content)
+
+	// Fetch MCP instance tools
+	instances, err := Q.GetMCPServerInstances(context.Background())
+
+	if err != nil {
+		HTTPReturnError(w, ErrorOptions{
+			Err: fmt.Errorf("Failed to get MCP instances - %w", err).Error(),
+		})
+		app.ErrLogger.Print(err)
+	}
+
+	fmt.Printf("MCP INSTANCES\n%+v\n", instances)
+
+	// for _, inst := range instances {
+	// for _, t := range inst.Tools {
+
+	// }
+	// }
+
+	//Load tools from instances into LLM
+
+	// for _, t := range instances
+	// for _, inst := range instances {
+	// 	inst.
+	// }
 
 	HTTPSendJSON(w, msg, &JSONResponseOptions{})
 }

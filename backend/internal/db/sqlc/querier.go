@@ -11,6 +11,7 @@ import (
 type Querier interface {
 	DeleteMCPServerInstance(ctx context.Context, id string) error
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
+	GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInstancesRow, error)
 	GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error)
 	//*********************************
 	InsertMCPServerImage(ctx context.Context, arg InsertMCPServerImageParams) error

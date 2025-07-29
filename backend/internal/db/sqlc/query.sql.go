@@ -69,6 +69,67 @@ func (q *Queries) GetMCPServerImage(ctx context.Context, id string) (GetMCPServe
 	return i, err
 }
 
+const getMCPServerInstances = `-- name: GetMCPServerInstances :many
+SELECT
+  inst.id as instance_id,
+  inst.address,
+  img.id AS image_id,
+  json_group_array(
+    json_object(
+      'name',
+      tool.name,
+      'description',
+      tool.description,
+      'schema',
+      tool.schema
+    )
+  ) as tools
+FROM
+  mcp_server_instances inst
+  LEFT JOIN mcp_server_images AS img ON inst.slug = img.slug
+  AND inst.version = img.version
+  LEFT JOIN mcp_server_tools as tool ON img.id = tool.image_id
+GROUP BY
+  inst.id,
+  inst.address,
+  img.id
+`
+
+type GetMCPServerInstancesRow struct {
+	InstanceID string
+	Address    string
+	ImageID    sql.NullString
+	Tools      interface{}
+}
+
+func (q *Queries) GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInstancesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getMCPServerInstances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMCPServerInstancesRow
+	for rows.Next() {
+		var i GetMCPServerInstancesRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.Address,
+			&i.ImageID,
+			&i.Tools,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOauthTokenByProvider = `-- name: GetOauthTokenByProvider :one
 SELECT
   id, refresh_token, oauth_provider
