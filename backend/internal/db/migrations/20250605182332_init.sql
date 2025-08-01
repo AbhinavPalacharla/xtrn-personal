@@ -1,5 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
+-- OAuth providers and tokens
 CREATE TABLE oauth_providers (
   name TEXT PRIMARY KEY,
   client_id TEXT NOT NULL,
@@ -8,6 +9,9 @@ CREATE TABLE oauth_providers (
   scopes TEXT
 );
 
+/*
+User token attached to an oauth provider
+*/
 CREATE TABLE oauth_tokens (
   id TEXT PRIMARY KEY,
   refresh_token TEXT UNIQUE NOT NULL,
@@ -15,6 +19,11 @@ CREATE TABLE oauth_tokens (
   FOREIGN KEY (oauth_provider) REFERENCES oauth_providers (name)
 );
 
+/***************************************************/
+/*
+mcp_servers is a list of possible MCP servers that can exist.
+Must create an instance to use the server
+*/
 CREATE TABLE mcp_server_images (
   id TEXT UNIQUE NOT NULL,
   slug TEXT NOT NULL,

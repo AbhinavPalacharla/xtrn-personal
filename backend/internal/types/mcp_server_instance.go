@@ -94,7 +94,7 @@ func startMCPServerInstance(inst *MCPServerInstance) error {
 	n, _ := conn.Read(buf)
 
 	//Save address
-	inst.Address = string(buf[:n])
+	inst.Address = "http://" + string(buf[:n])
 
 	return nil
 }

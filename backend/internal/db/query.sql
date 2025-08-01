@@ -92,22 +92,16 @@ SELECT
   inst.id as instance_id,
   inst.address,
   img.id AS image_id,
-  json_group_array(
-    json_object(
-      'name',
-      tool.name,
-      'description',
-      tool.description,
-      'schema',
-      tool.schema
-    )
-  ) as tools
+  tool.name as tool_name,
+  tool.description as tool_desc,
+  tool.schema as tool_schema
 FROM
   mcp_server_instances inst
   LEFT JOIN mcp_server_images AS img ON inst.slug = img.slug
   AND inst.version = img.version
-  LEFT JOIN mcp_server_tools as tool ON img.id = tool.image_id
-GROUP BY
-  inst.id,
-  inst.address,
-  img.id;
+  LEFT JOIN mcp_server_tools as tool ON img.id = tool.image_id;
+
+-- GROUP BY
+--   inst.id,
+--   inst.address,
+--   img.id;
