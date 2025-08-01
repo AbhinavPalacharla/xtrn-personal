@@ -57,6 +57,10 @@ type MCPServerImage struct {
 }
 
 func saveMCPServerImageToDB(img *MCPServerImage) error {
+	b, _ := json.Marshal(img)
+
+	fmt.Printf("RAW IMG: %s\n", string(b))
+
 	tx, err := DB.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("%w", err)
@@ -170,8 +174,11 @@ func (img *MCPServerImage) getTools() ([]MCPTool, error) {
 
 	toolsRes, err := client.ListTools(ctx, mcp.ListToolsRequest{})
 
+	b, _ := json.Marshal(toolsRes)
+	fmt.Printf("TOOLS: %s\n", string(b))
+
 	for _, tool := range toolsRes.Tools {
-		schemaBytes, err := json.Marshal(tool.RawInputSchema)
+		schemaBytes, err := json.Marshal(tool.InputSchema)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to marshal tool input schema - %w\n", err)
 		}

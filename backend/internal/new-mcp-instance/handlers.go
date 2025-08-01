@@ -68,7 +68,7 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.app.ErrLogger.Println("TOOL CALL REQUEST RECIEVED")
-	s.app.ErrLogger.Println(req)
+	s.app.ErrLogger.Printf("RAW REQUEST: %v\n", req)
 
 	toolCallRequest := mcp.CallToolRequest{}
 	toolCallRequest.Params.Name = req.Name
@@ -81,7 +81,7 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 
 	b, _ := json.MarshalIndent(res, "", "  ")
 
-	s.app.Logger.Printf("RAW TOOL RESPONSE: %v | err; %v\n", string(b), err)
+	s.app.Logger.Printf("RAW TOOL RESPONSE: %v | err: %s\n", string(b), err.Error())
 
 	//Tool call took too long
 	if errors.Is(err, context.DeadlineExceeded) {

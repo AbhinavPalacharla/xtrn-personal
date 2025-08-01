@@ -38,7 +38,6 @@ func NewApp() (*App, error) {
 	} else {
 		a.Listener = listener
 	}
-
 	loggers := NewAPILoggers()
 
 	a.Logger = loggers.Logger
@@ -187,7 +186,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msgHist := []llms.MessageContent{
-		llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this weekend and create a calendar event for next week on Friday called dinner. Current date is 7/30/2025"),
+		llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this weekend?"),
 		// llms.TextParts(llms.ChatMessageTypeHuman, "Create a calendar event for next week on Friday called dinner"),
 	}
 
@@ -202,9 +201,13 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msgHist = updateMessageHistory(msgHist, resp)
-	msgHist = execToolCalls(msgHist, resp, toolToAddr)
 
 	b, _ := json.MarshalIndent(msgHist, "", "  ")
+	fmt.Printf("MSG HIST: %s\n", string(b))
+
+	msgHist = execToolCalls(msgHist, resp, toolToAddr)
+
+	b, _ = json.MarshalIndent(msgHist, "", "  ")
 	fmt.Printf("\n\nRESP: %s\n", string(b))
 
 	HTTPSendJSON(w, msg, &JSONResponseOptions{})
