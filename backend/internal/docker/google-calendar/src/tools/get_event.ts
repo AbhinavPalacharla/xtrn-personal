@@ -2,6 +2,7 @@ import { z } from "zod";
 import { type InferSchema } from "xmcp";
 import { googleOauthClient } from "../auth";
 import { google } from "googleapis";
+import { NewMCPResponse } from "../utils/error";
 
 export const schema = {
   eventId: z.string().describe("ID of the event to retrieve"),
@@ -26,12 +27,14 @@ export default async function getEvent(args: InferSchema<typeof schema>) {
     eventId: args.eventId,
   });
 
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(res.data, null, 2),
-      },
-    ],
-  };
+  return NewMCPResponse(JSON.stringify(res));
+
+  // return {
+  //   content: [
+  //     {
+  //       type: "text",
+  //       text: JSON.stringify(res.data, null, 2),
+  //     },
+  //   ],
+  // };
 }

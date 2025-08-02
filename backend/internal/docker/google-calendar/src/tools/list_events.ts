@@ -2,6 +2,7 @@ import { z } from "zod";
 import { type InferSchema } from "xmcp";
 import { googleOauthClient } from "../auth";
 import { google } from "googleapis";
+import { NewMCPResponse } from "../utils/error";
 
 export const schema = {
   timeMin: z.string().describe("Start of time range (ISO format)"),
@@ -33,12 +34,14 @@ export default async function listEvents(args: InferSchema<typeof schema>) {
     singleEvents: true,
   });
 
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(res.data.items ?? [], null, 2),
-      },
-    ],
-  };
+  return NewMCPResponse(JSON.stringify(res));
+
+  // return {
+  //   content: [
+  //     {
+  //       type: "text",
+  //       text: JSON.stringify(res.data.items ?? [], null, 2),
+  //     },
+  //   ],
+  // };
 }

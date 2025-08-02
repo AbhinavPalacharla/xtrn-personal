@@ -186,7 +186,8 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msgHist := []llms.MessageContent{
-		llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this weekend?"),
+		// llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this week. For the week of 7/27/2025?"),
+		llms.TextParts(llms.ChatMessageTypeHuman, "Create an event on my calendar called dinner for this friday at 7pm. For the week of 7/27/2025"),
 		// llms.TextParts(llms.ChatMessageTypeHuman, "Create a calendar event for next week on Friday called dinner"),
 	}
 
@@ -249,6 +250,8 @@ func execToolCalls(msgHist []llms.MessageContent, resp *llms.ContentResponse, to
 
 		payloadJsonB, _ := json.Marshal(payload)
 
+		fmt.Printf("REQUEST PAYLOAD: %s\n", string(payloadJsonB))
+
 		// args := bytes.NewBufferString(toolCall.FunctionCall.Arguments)
 		// fmt.Printf("ARGS: %s\n", args.String())
 
@@ -258,10 +261,19 @@ func execToolCalls(msgHist []llms.MessageContent, resp *llms.ContentResponse, to
 		}
 		defer res.Body.Close()
 
+		fmt.Printf("RESPONSE RECIEVED\n")
+
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			log.Panic(fmt.Errorf("Failed to read request body - %w\n", err))
 		}
+
+		resBody := map[string]any{}
+		json.Unmarshal(body, &resBody)
+
+		contentB, _ := json.Marshal(resBody)
+
+		fmt.Printf("RAW RESPONSE BODY: %s\n", string(contentB))
 
 		msgHist = append(msgHist, llms.MessageContent{
 			Role: llms.ChatMessageTypeTool,
@@ -269,7 +281,7 @@ func execToolCalls(msgHist []llms.MessageContent, resp *llms.ContentResponse, to
 				llms.ToolCallResponse{
 					ToolCallID: toolCall.ID,
 					Name:       toolCall.FunctionCall.Name,
-					Content:    string(body),
+					Content:    string(contentB),
 				},
 			},
 		})
