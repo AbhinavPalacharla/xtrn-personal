@@ -111,8 +111,6 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		app.ErrLogger.Print(err)
 	}
 
-	// fmt.Printf("%+v\n\n", instanceRows)
-
 	instances := map[string]*ChatMCPInstance{}
 
 	for _, i := range instanceRows {
@@ -130,12 +128,8 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if ok {
-			// fmt.Printf("Adding tool %s to %s\n", i.ToolName.String, i.InstanceID)
-
 			schema := map[string]any{}
 			json.Unmarshal([]byte(i.ToolSchema.String), &schema)
-
-			// fmt.Print("unmarshal done")
 
 			inst.Tools = append(inst.Tools, MCPInstanceTool{
 				Name:        i.ToolName.String,
@@ -145,14 +139,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	for k, v := range instances {
-		fmt.Printf("[INST] ID: %s \t ADDR: %s \t IMG: %s \t Tools\n", k, v.Address, v.ImgID)
-		for _, t := range v.Tools {
-			fmt.Printf("\t[TOOL] %s\n\tDesc: %s\n\tSchema: %v\n", t.Name, t.Description, t.InputSchema)
-		}
-	}
-
-	// fmt.Printf("%+v", instances)
+	ViewObjectAsJSON("MCP INSTANCES", instances, nil)
 
 	tools := []llms.Tool{}
 	toolToAddr := map[string]string{}
@@ -187,12 +174,13 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	msgHist := []llms.MessageContent{
 		// llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this week. For the week of 7/27/2025?"),
-		llms.TextParts(llms.ChatMessageTypeHuman, "Create an event on my calendar called dinner for this friday at 7pm. For the week of 7/27/2025"),
+		llms.TextParts(llms.ChatMessageTypeHuman, "Create an event on my calendar called dinner for this friday at 7pm. For the week of 7/27/2025. I am trying to test out tool calling so the first time you call the create calendar tool do not include a timzeone. On the second call, make the timezone PST. Never ask to proceed for tool calls, just make the tool call request.."),
 		// llms.TextParts(llms.ChatMessageTypeHuman, "Create a calendar event for next week on Friday called dinner"),
 	}
 
 	fmt.Printf("Checking calendar...")
 
+	// Get initial response from LLM
 	resp, err := llm.GenerateContent(context.Background(), msgHist, llms.WithTools(tools))
 	if err != nil {
 		HTTPReturnError(w, ErrorOptions{
@@ -201,15 +189,37 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		app.ErrLogger.Print(err)
 	}
 
+	fmt.Println("LLM RESPONSE SUCCEEDED")
+
+	// Add LLM response to msg history
 	msgHist = updateMessageHistory(msgHist, resp)
 
-	b, _ := json.MarshalIndent(msgHist, "", "  ")
-	fmt.Printf("MSG HIST: %s\n", string(b))
+	ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
 
-	msgHist = execToolCalls(msgHist, resp, toolToAddr)
+	for {
+		// Check if there are any tool calls to execute and execute them
+		if len(resp.Choices[0].ToolCalls) == 0 {
+			break // No tools needed so end conversation loop and wait for user to send next message
+		}
+		msgHist = execToolCalls(msgHist, resp, toolToAddr)
 
-	b, _ = json.MarshalIndent(msgHist, "", "  ")
-	fmt.Printf("\n\nRESP: %s\n", string(b))
+		ViewObjectAsJSON("MSG HIST TOOL", msgHist, nil)
+
+		// Call LLM again with tool call responses
+		resp, err = llm.GenerateContent(context.Background(), msgHist, llms.WithTools(tools))
+		if err != nil {
+			HTTPReturnError(w, ErrorOptions{
+				Err: fmt.Errorf("Failed to get response from LLM - %w", err).Error(),
+			})
+			app.ErrLogger.Print(err)
+			return
+		}
+
+		// Add LLM response to msg history
+		msgHist = updateMessageHistory(msgHist, resp)
+
+		ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
+	}
 
 	HTTPSendJSON(w, msg, &JSONResponseOptions{})
 }

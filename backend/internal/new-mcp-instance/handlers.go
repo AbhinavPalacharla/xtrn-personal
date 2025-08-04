@@ -133,14 +133,26 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 				IsError:   false,
 			}
 
-			b, _ := json.MarshalIndent(toolCallRes, "", "    ")
+			ViewObjectAsJSON("TOOL CALL RES", toolCallRes, s.app.ErrLogger.Printf)
 
-			s.app.ErrLogger.Printf("TOOL CALL RES: %s\n", string(b))
+			// b, _ := json.MarshalIndent(toolCallRes, "", "    ")
+
+			// s.app.ErrLogger.Printf("TOOL CALL RES: %s\n", string(b))
 
 			if err := HTTPSendJSON(w, toolCallRes, nil); err != nil {
 				s.app.ErrLogger.Printf("Failed to send JSON - %v\n", err)
 			}
+		} else if xtrnHeader.XtrnMessageType == "LLM_ERROR_RESPONSE" {
 
+			toolCallRes := ToolCallRes{
+				ToolUseID: req.ToolUseID,
+				Content:   res.Content[1:],
+				IsError:   true,
+			}
+
+			HTTPSendJSON(w, toolCallRes, &JSONResponseOptions{
+				StatusCode: http.StatusBadRequest,
+			})
 		} else if xtrnHeader.XtrnMessageType == "ERROR" {
 			if *xtrnHeader.ErrorType == "AUTH_INVALID_GRANT" {
 				HTTPReturnError(w, ErrorOptions{
@@ -153,92 +165,6 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-
-	// } else if err != nil {
-	// 	// Tool call failed for external reason
-	// 	s.app.ErrLogger.Printf("Tool Call failed - %v\n", err)
-
-	// 	toolCallResult := ToolCallRes{
-	// 		ToolUseID: req.ToolUseID,
-	// 		Content: []mcp.Content{
-	// 			mcp.NewTextContent(fmt.Sprintf("%v", err)),
-	// 		},
-	// 		IsError: true,
-	// 	}
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	_ = json.NewEncoder(w).Encode(toolCallResult)
-	// } else {
-	// 	//Extract main response
-	// 	contentBytes := []byte(res.Content[0].(mcp.TextContent).Text)
-
-	// 	fmt.Printf("CONTENT BYTES: %v\n", string(contentBytes))
-
-	// 	type ContentItem struct {
-	// 		Type      string `json:"type"`
-	// 		Text      string `json:"text,omitempty"`
-	// 		ErrorCode string `json:"error_code,omitempty"`
-	// 		Error     string `json:"error,omitempty"`
-	// 	}
-
-	// 	mainContent := struct {
-	// 		IsError bool          `json:"is_error"`
-	// 		Content []ContentItem `json:"content"`
-	// 	}{}
-
-	// 	if err := json.Unmarshal([]byte(contentBytes), &mainContent); err != nil {
-	// 		s.app.ErrLogger.Printf("Failed to unmarshal main content - %v\n", err)
-
-	// 		toolCallResult := ToolCallRes{
-	// 			ToolUseID: req.ToolUseID,
-	// 			Content: []mcp.Content{
-	// 				mcp.NewTextContent(fmt.Sprintf("%v", err)),
-	// 			},
-	// 			IsError: true,
-	// 		}
-
-	// 		err := shared.HTTPSendJSON(w, toolCallResult, &JSONResponseOptions{StatusCode: http.StatusInternalServerError})
-
-	// 		if err != nil {
-	// 			s.app.ErrLogger.Printf("Failed to send Tool Call Result - %v\n", err)
-	// 		}
-	// 	}
-
-	// 	s.app.ErrLogger.Printf("MAIN CONTENT: %v\n", mainContent)
-
-	// 	// Check if XTRN error in content
-	// 	if c := mainContent.Content[0]; c.Type == "error" {
-	// 		errContent := ToolCallErrRes{
-	// 			Type:      c.Type,
-	// 			ErrorCode: c.ErrorCode,
-	// 			Error:     c.Error,
-	// 		}
-
-	// 		HTTPSendJSON(w, errContent, &JSONResponseOptions{
-	// 			StatusCode: http.StatusUnauthorized,
-	// 		})
-	// 		return
-
-	// 	} else if c := mainContent.Content[0]; c.Type == "text" {
-	// 		textContent := ToolCallTextRes{
-	// 			Text: c.Text,
-	// 			Type: c.Type,
-	// 		}
-
-	// 		toolCallResult := ToolCallRes{
-	// 			ToolUseID: req.ToolUseID,
-	// 			Content: []mcp.Content{
-	// 				mcp.NewTextContent(textContent.Text),
-	// 			},
-	// 			IsError: false,
-	// 		}
-
-	// 		err := HTTPSendJSON(w, toolCallResult, nil)
-
-	// 		if err != nil {
-	// 			s.app.ErrLogger.Printf("Failed to send Tool Call Result - %v\n", err)
-	// 		}
-	// 	}
-	// }
 }
 
 func (s *HTTPServer) handleKill(w http.ResponseWriter, r *http.Request) {

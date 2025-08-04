@@ -2,6 +2,7 @@ package shared
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -10,6 +11,7 @@ type ErrorOptions struct {
 	Code int
 }
 
+// Default returns HTTP Code 500 (Internal Server Error)
 func HTTPReturnError(w http.ResponseWriter, opts ErrorOptions) error {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -63,4 +65,16 @@ func DecodeJSONBody[T any](r *http.Request, w http.ResponseWriter) (*T, error) {
 	}
 
 	return &payload, nil
+}
+
+func ViewObjectAsJSON(prefix string, obj any, printFn func(fmtString string, a ...any)) {
+	b, _ := json.MarshalIndent(obj, "", "   ")
+
+	fmtStr := fmt.Sprintf("\n\n%s: %s\n\n", prefix, string(b))
+
+	if printFn != nil {
+		printFn(fmtStr)
+	} else {
+		fmt.Print(fmtStr)
+	}
 }

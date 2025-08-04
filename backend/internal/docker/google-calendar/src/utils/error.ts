@@ -14,7 +14,12 @@ type XtrnErrorTypes =
   | "UNKNOWN_ERROR";
 
 type XtrnHeader = {
-  xtrn_message_type: "ERROR" | "RESPONSE";
+  /**
+    ERROR = MCP Level error - must be handled externally
+    LLM_ERROR_RESPONSE = Error that LLM is capable of handling i.e. missing args, etc.
+    RESPONSE = Successful tool call response
+  */
+  xtrn_message_type: "ERROR" | "RESPONSE" | "LLM_ERROR_RESPONSE";
   error_type?: XtrnErrorTypes;
   message?: string;
 };
@@ -44,6 +49,26 @@ const NewMCPResponse = (res: string): MCPResponse => {
 
   return {
     isError: false,
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(xtrnHeader),
+      },
+      {
+        type: "text",
+        text: res,
+      },
+    ],
+  };
+};
+
+const NewMCPLLMErrorResponse = (res: string): MCPResponse => {
+  const xtrnHeader: XtrnHeader = {
+    xtrn_message_type: "LLM_ERROR_RESPONSE",
+  };
+
+  return {
+    isError: true,
     content: [
       {
         type: "text",
@@ -130,7 +155,7 @@ export function handleAuthErrorToMCP(error: unknown) {
   return undefined;
 }
 
-export { NewMCPError, NewMCPResponse };
+export { NewMCPError, NewMCPResponse, NewMCPLLMErrorResponse };
 
 // type MCPResponse = {
 //   isError: boolean;
