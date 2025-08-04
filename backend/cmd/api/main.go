@@ -201,6 +201,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		if len(resp.Choices[0].ToolCalls) == 0 {
 			break // No tools needed so end conversation loop and wait for user to send next message
 		}
+
 		msgHist = execToolCalls(msgHist, resp, toolToAddr)
 
 		ViewObjectAsJSON("MSG HIST TOOL", msgHist, nil)

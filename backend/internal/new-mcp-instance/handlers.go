@@ -55,10 +55,9 @@ type ToolCallTextRes struct {
 }
 
 type ToolCallRes struct {
-	ToolUseID string `json:"tool_use_id"`
-	// Content   string `json:"content"` //JSON string of MCP response
-	Content []mcp.Content `json:"content"`
-	IsError bool          `json:"is_error"`
+	ToolUseID string        `json:"tool_use_id"`
+	Content   []mcp.Content `json:"content"`
+	IsError   bool          `json:"is_error"`
 }
 
 func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
