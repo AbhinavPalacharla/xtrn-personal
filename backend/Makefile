@@ -15,25 +15,25 @@ setup-env:
 
 build-start-mcp-instance:
 	@mkdir -p $(BIN_DIR)
-    go build -o $(BIN_DIR)/start-mcp-instance ./$(CMD_DIR)/start-mcp-instance/main.go
+	go build -o $(BIN_DIR)/start-mcp-instance ./$(CMD_DIR)/start-mcp-instance/main.go
 
 # Remove built binaries
 clean:
-    rm -f $(BIN_DIR)/*
+	rm -f $(BIN_DIR)/*
 
 ######################## SCRIPTS ########################
 
-make delete-mcp-instances:
-    go run $(SCRIPTS_DIR)/delete_mcp_instances/main.go
+delete-mcp-instances:
+	go run $(SCRIPTS_DIR)/delete_mcp_instances/main.go
 
-make init-mcp-instances:
-    go run $(SCRIPTS_DIR)/init_mcp_server_instances/main.go
+init-mcp-instances:
+	go run $(SCRIPTS_DIR)/init_mcp_server_instances/main.go
 
-make init-oauth-providers:
-    go run $(SCRIPTS_DIR)/init_oauth_providers/main.go
+init-oauth-providers:
+	go run $(SCRIPTS_DIR)/init_oauth_providers/main.go
 
-make init-mcp-images:
-    go run $(SCRIPTS_DIR)/init_mcp_server_images/main.go
+init-mcp-images:
+	go run $(SCRIPTS_DIR)/init_mcp_server_images/main.go
 
 ######################## DATABASE ########################
 

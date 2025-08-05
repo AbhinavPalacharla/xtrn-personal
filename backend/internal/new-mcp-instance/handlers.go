@@ -60,17 +60,27 @@ type ToolCallRes struct {
 	IsError   bool          `json:"is_error"`
 }
 
+type XtrnMessageType string
+
+const (
+	XtrnMessageTypeResponse XtrnMessageType = "RESPONSE"
+	XtrnMessageTypeError    XtrnMessageType = "ERROR"
+	XtrnMessageTypeLLMError XtrnMessageType = "LLM_ERROR_RESPONSE"
+)
+
+type XtrnHeader struct {
+	XtrnMessageType XtrnMessageType `json:"xtrn_message_type"`
+	ErrorType       *string         `json:"error_type,omitempty"`
+	Message         *string         `json:"message,omitempty"`
+}
+
 func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	req, err := DecodeJSONBody[ToolCallReq](r, w)
 	if err != nil {
 		return
 	}
 
-	s.app.ErrLogger.Println("TOOL CALL REQUEST RECIEVED")
-	// s.app.ErrLogger.Printf("RAW REQUEST: %v\n", req)
-
-	rb, _ := json.MarshalIndent(req, "", "   ")
-	s.app.ErrLogger.Printf("RAW REQUEST: %s\n", rb)
+	ViewObjectAsJSON("RAW REQUEST", req, s.app.Logger.Printf)
 
 	toolCallRequest := mcp.CallToolRequest{}
 	toolCallRequest.Params.Name = req.Name
@@ -85,46 +95,42 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 		s.app.ErrLogger.Printf("TOOL CALL ERROR: %s\n", err.Error())
 	}
 
-	_ = res
+	ViewObjectAsJSON("RAW TOOL RESPONSE", res, s.app.Logger.Printf)
 
-	b, err := json.MarshalIndent(res, "", "  ")
-
-	if err != nil {
-		s.app.ErrLogger.Printf("TOOL CALL MARSHALL ERROR: %s\n", err.Error())
-	}
-
-	_ = b
-	s.app.ErrLogger.Printf("RAW TOOL RESPONSE: %s\n", string(b))
-
-	//Tool call took too long
 	if errors.Is(err, context.DeadlineExceeded) {
-		http.Error(w, "Tool call request timeout", http.StatusRequestTimeout)
+
+		//Tool call took too long
+		HTTPReturnError(w, ErrorOptions{
+			Err:  "Tool call request timeout",
+			Code: http.StatusRequestTimeout,
+		})
+
 		s.app.ErrLogger.Printf("Tool call request timeout - %v\n", err)
+
 	} else if err != nil {
+
 		// Tool call failed for unknown reason
+		HTTPReturnError(w, ErrorOptions{
+			Err:  err.Error(),
+			Code: http.StatusInternalServerError,
+		})
+		s.app.ErrLogger.Printf("Tool call failed for unknown reason - %v", err)
+
 	} else {
-		// Tool call response recieved
 
 		// Check xtrn header for type of request either REQUEST or ERROR
 		xtrnHeaderRaw := res.Content[0].(mcp.TextContent).Text
 
-		b, _ := json.MarshalIndent(xtrnHeaderRaw, "", "    ")
-		s.app.ErrLogger.Printf("XTRN HEADER: %s\n", string(b))
+		var xtrnHeader XtrnHeader
 
-		xtrnHeader := struct {
-			XtrnMessageType string  `json:"xtrn_message_type"` // "ERROR" or "RESPONSE"
-			ErrorType       *string `json:"error_type,omitempty"`
-			Message         *string `json:"message,omitempty"`
-		}{}
-
-		err := json.Unmarshal([]byte(xtrnHeaderRaw), &xtrnHeader)
-
-		if err != nil {
+		if err := json.Unmarshal([]byte(xtrnHeaderRaw), &xtrnHeader); err != nil {
 			s.app.ErrLogger.Printf("Failed to unmarshall header - %v\n", err)
 		}
 
-		if xtrnHeader.XtrnMessageType == "RESPONSE" {
-			// contentBytes := []byte(res.Content[1].(mcp.TextContent).Text)
+		ViewObjectAsJSON("XTRN HEADER", xtrnHeader, s.app.Logger.Printf)
+
+		if xtrnHeader.XtrnMessageType == XtrnMessageTypeResponse {
+			// REGULAR RESPONSE
 
 			toolCallRes := ToolCallRes{
 				ToolUseID: req.ToolUseID,
@@ -134,14 +140,12 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 
 			ViewObjectAsJSON("TOOL CALL RES", toolCallRes, s.app.ErrLogger.Printf)
 
-			// b, _ := json.MarshalIndent(toolCallRes, "", "    ")
-
-			// s.app.ErrLogger.Printf("TOOL CALL RES: %s\n", string(b))
-
 			if err := HTTPSendJSON(w, toolCallRes, nil); err != nil {
 				s.app.ErrLogger.Printf("Failed to send JSON - %v\n", err)
 			}
-		} else if xtrnHeader.XtrnMessageType == "LLM_ERROR_RESPONSE" {
+
+		} else if xtrnHeader.XtrnMessageType == XtrnMessageTypeLLMError {
+			// LLM ERROR
 
 			toolCallRes := ToolCallRes{
 				ToolUseID: req.ToolUseID,
@@ -149,10 +153,16 @@ func (s *HTTPServer) handleCallTool(w http.ResponseWriter, r *http.Request) {
 				IsError:   true,
 			}
 
+			ViewObjectAsJSON("TOOL CALL RES (LLM ERR)", toolCallRes, s.app.ErrLogger.Printf)
+
 			HTTPSendJSON(w, toolCallRes, &JSONResponseOptions{
 				StatusCode: http.StatusBadRequest,
 			})
-		} else if xtrnHeader.XtrnMessageType == "ERROR" {
+		} else if xtrnHeader.XtrnMessageType == XtrnMessageTypeError {
+			// XTRN ERROR
+
+			s.app.ErrLogger.Printf("AUTH INVALID - %v", xtrnHeader)
+
 			if *xtrnHeader.ErrorType == "AUTH_INVALID_GRANT" {
 				HTTPReturnError(w, ErrorOptions{
 					Err:  fmt.Sprintf("ERROR: %s REASON: %s", *xtrnHeader.ErrorType, *xtrnHeader.Message),
@@ -171,9 +181,9 @@ func (s *HTTPServer) handleKill(w http.ResponseWriter, r *http.Request) {
 
 	s.app.InstanceClient.Close()
 
-	s.app.Listener.Close()
-
 	Q.DeleteMCPServerInstance(context.Background(), s.app.InstanceID)
 
 	HTTPSendJSON[any](w, nil, &JSONResponseOptions{})
+
+	// s.app.Listener.Close()
 }

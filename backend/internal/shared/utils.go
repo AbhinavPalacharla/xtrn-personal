@@ -68,9 +68,15 @@ func DecodeJSONBody[T any](r *http.Request, w http.ResponseWriter) (*T, error) {
 }
 
 func ViewObjectAsJSON(prefix string, obj any, printFn func(fmtString string, a ...any)) {
-	b, _ := json.MarshalIndent(obj, "", "   ")
+	b, err := json.MarshalIndent(obj, "", "   ")
 
-	fmtStr := fmt.Sprintf("\n\n%s: %s\n\n", prefix, string(b))
+	var fmtStr string
+
+	if err != nil {
+		fmtStr = fmt.Sprintf("\n\n%s: ERROR - Failed to marshal: %v\n\n", prefix, err)
+	} else {
+		fmtStr = fmt.Sprintf("\n\n%s: %s\n\n", prefix, string(b))
+	}
 
 	if printFn != nil {
 		printFn(fmtStr)
