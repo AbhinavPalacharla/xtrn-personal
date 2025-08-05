@@ -12,6 +12,15 @@ import (
 	"github.com/AbhinavPalacharla/xtrn-personal/internal/db/models"
 )
 
+const deleteAllMCPinstances = `-- name: DeleteAllMCPinstances :exec
+DELETE FROM mcp_server_instances
+`
+
+func (q *Queries) DeleteAllMCPinstances(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllMCPinstances)
+	return err
+}
+
 const deleteMCPServerInstance = `-- name: DeleteMCPServerInstance :exec
 DELETE FROM mcp_server_instances
 WHERE

@@ -1,30 +1,42 @@
 # Project configuration
 CMD_DIR := cmd
 BIN_DIR := bin
+SCRIPTS_DIR := scripts
 LOG_DIR := logs
 DB_PATH := internal/db/db.db
 MIGRATIONS_DIR := internal/db/migrations
-SCHEMA_PATH := internal/db/schema.sql
 
-.PHONY: setup-env build-all build-% db-generate db-reset db-init db-migrate-create db-migrate-up db-migrate-down clean
+.PHONY: setup-env
 
-# Setup environment (prints export statements for eval)
 setup-env:
 	@echo "export ENV_PATH=$(CURDIR)/.env"
 	@echo "export BIN_DIR=$(CURDIR)/$(BIN_DIR)"
 	@echo "export LOG_DIR=$(CURDIR)/$(LOG_DIR)"
 
-# Build specific binary (e.g., make build-create-mcp-client-instance)
-build-%:
+build-start-mcp-instance:
 	@mkdir -p $(BIN_DIR)
-	go build -o $(BIN_DIR)/$* ./$(CMD_DIR)/$*/main.go
+    go build -o $(BIN_DIR)/start-mcp-instance ./$(CMD_DIR)/start-mcp-instance/main.go
 
-# Build all core binaries
-build-all:
-	@mkdir -p $(BIN_DIR)
-	go build -o $(BIN_DIR)/create-mcp-client-instance ./$(CMD_DIR)/createMCPClientInstance
+# Remove built binaries
+clean:
+    rm -f $(BIN_DIR)/*
 
-# Generate code from SQLC
+######################## SCRIPTS ########################
+
+make delete-mcp-instances:
+    go run $(SCRIPTS_DIR)/delete_mcp_instances/main.go
+
+make init-mcp-instances:
+    go run $(SCRIPTS_DIR)/init_mcp_server_instances/main.go
+
+make init-oauth-providers:
+    go run $(SCRIPTS_DIR)/init_oauth_providers/main.go
+
+make init-mcp-images:
+    go run $(SCRIPTS_DIR)/init_mcp_server_images/main.go
+
+######################## DATABASE ########################
+
 db-generate:
 	sqlc generate
 
@@ -33,11 +45,6 @@ db-reset:
 	rm -f $(DB_PATH)
 	goose -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) up
 	sqlc generate
-	# go run $(CMD_DIR)/initDB/main.go
-
-# Init data (no schema changes)
-db-init:
-	go run $(CMD_DIR)/initDB/main.go
 
 # Create a new migration: make db-migrate-create name=create_users_table
 db-migrate-create:
@@ -55,7 +62,3 @@ db-migrate-up:
 # Migrate down
 db-migrate-down:
 	goose -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) down
-
-# Remove built binaries
-clean:
-	rm -f $(BIN_DIR)/*

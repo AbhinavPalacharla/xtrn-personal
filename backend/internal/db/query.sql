@@ -101,6 +101,9 @@ FROM
   AND inst.version = img.version
   LEFT JOIN mcp_server_tools as tool ON img.id = tool.image_id;
 
+-- name: DeleteAllMCPinstances :exec
+DELETE FROM mcp_server_instances;
+
 -- GROUP BY
 --   inst.id,
 --   inst.address,

@@ -161,8 +161,10 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	openAIKey, err := GetEnv("OPENAI_KEY")
+
 	llm, err := openai.New(
-		openai.WithToken(""),
+		openai.WithToken(openAIKey),
 		openai.WithModel("gpt-4.1-mini"),
 	)
 	if err != nil {

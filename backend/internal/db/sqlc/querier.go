@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	DeleteAllMCPinstances(ctx context.Context) error
 	DeleteMCPServerInstance(ctx context.Context, id string) error
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
 	GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInstancesRow, error)
