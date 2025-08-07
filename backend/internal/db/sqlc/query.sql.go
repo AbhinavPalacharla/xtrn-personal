@@ -132,6 +132,79 @@ func (q *Queries) GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInst
 	return items, nil
 }
 
+const getMessages = `-- name: GetMessages :many
+SELECT
+  m.id,
+  m.role,
+  m.content,
+  m.stop_reason,
+  m.chat_id,
+  treq.tool_call_id as treq_tool_call_id,
+  treq.name as treq_name,
+  treq.arguments as treq_args,
+  tres.tool_call_id as tres_id,
+  tres.name as tres_name,
+  tres.content as tres_content,
+  tres.is_error as tres_is_error
+FROM
+  messages m
+  LEFT JOIN tool_call_request as treq ON treq.message_id = m.id
+  LEFT JOIN tool_call_result as tres ON tres.message_id = m.id
+WHERE
+  chat_id = ?
+`
+
+type GetMessagesRow struct {
+	ID             string
+	Role           string
+	Content        sql.NullString
+	StopReason     sql.NullString
+	ChatID         string
+	TreqToolCallID sql.NullString
+	TreqName       sql.NullString
+	TreqArgs       sql.NullString
+	TresID         sql.NullString
+	TresName       sql.NullString
+	TresContent    sql.NullString
+	TresIsError    sql.NullBool
+}
+
+func (q *Queries) GetMessages(ctx context.Context, chatID string) ([]GetMessagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getMessages, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMessagesRow
+	for rows.Next() {
+		var i GetMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.StopReason,
+			&i.ChatID,
+			&i.TreqToolCallID,
+			&i.TreqName,
+			&i.TreqArgs,
+			&i.TresID,
+			&i.TresName,
+			&i.TresContent,
+			&i.TresIsError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOauthTokenByProvider = `-- name: GetOauthTokenByProvider :one
 SELECT
   id, refresh_token, oauth_provider
@@ -146,6 +219,22 @@ func (q *Queries) GetOauthTokenByProvider(ctx context.Context, oauthProvider str
 	var i OauthToken
 	err := row.Scan(&i.ID, &i.RefreshToken, &i.OauthProvider)
 	return i, err
+}
+
+const insertChat = `-- name: InsertChat :exec
+/*
+Chat Queries
+*/
+INSERT INTO
+  chats (id)
+VALUES
+  (?)
+`
+
+// *********************************
+func (q *Queries) InsertChat(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, insertChat, id)
+	return err
 }
 
 const insertMCPServerImage = `-- name: InsertMCPServerImage :exec
@@ -249,6 +338,32 @@ func (q *Queries) InsertMCPServerInstanceTool(ctx context.Context, arg InsertMCP
 	return err
 }
 
+const insertMessage = `-- name: InsertMessage :exec
+INSERT INTO
+  messages (id, role, content, stop_reason, chat_id)
+VALUES
+  (?, ?, ?, ?, ?)
+`
+
+type InsertMessageParams struct {
+	ID         string
+	Role       string
+	Content    sql.NullString
+	StopReason sql.NullString
+	ChatID     string
+}
+
+func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) error {
+	_, err := q.db.ExecContext(ctx, insertMessage,
+		arg.ID,
+		arg.Role,
+		arg.Content,
+		arg.StopReason,
+		arg.ChatID,
+	)
+	return err
+}
+
 const insertOauthProvider = `-- name: InsertOauthProvider :exec
 /*
 OAUTH token queries
@@ -300,6 +415,56 @@ type InsertOauthTokenParams struct {
 
 func (q *Queries) InsertOauthToken(ctx context.Context, arg InsertOauthTokenParams) error {
 	_, err := q.db.ExecContext(ctx, insertOauthToken, arg.ID, arg.RefreshToken, arg.OauthProvider)
+	return err
+}
+
+const insertToolCallRequest = `-- name: InsertToolCallRequest :exec
+INSERT INTO
+  tool_call_request (message_id, tool_call_id, name, arguments)
+VALUES
+  (?, ?, ?, ?)
+`
+
+type InsertToolCallRequestParams struct {
+	MessageID  string
+	ToolCallID string
+	Name       string
+	Arguments  string
+}
+
+func (q *Queries) InsertToolCallRequest(ctx context.Context, arg InsertToolCallRequestParams) error {
+	_, err := q.db.ExecContext(ctx, insertToolCallRequest,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.Name,
+		arg.Arguments,
+	)
+	return err
+}
+
+const insertToolCallResult = `-- name: InsertToolCallResult :exec
+INSERT INTO
+  tool_call_result (message_id, tool_call_id, name, content, is_error)
+VALUES
+  (?, ?, ?, ?, ?)
+`
+
+type InsertToolCallResultParams struct {
+	MessageID  string
+	ToolCallID string
+	Name       string
+	Content    string
+	IsError    bool
+}
+
+func (q *Queries) InsertToolCallResult(ctx context.Context, arg InsertToolCallResultParams) error {
+	_, err := q.db.ExecContext(ctx, insertToolCallResult,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.Name,
+		arg.Content,
+		arg.IsError,
+	)
 	return err
 }
 

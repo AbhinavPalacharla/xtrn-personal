@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 
+	db "github.com/AbhinavPalacharla/xtrn-personal/internal/db/sqlc"
 	. "github.com/AbhinavPalacharla/xtrn-personal/internal/shared"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/tmc/langchaingo/llms"
@@ -30,7 +32,9 @@ func NewApp() (*App, error) {
 
 	//Configure HTTP Router
 	a.Mux = http.NewServeMux()
-	a.Mux.HandleFunc("/chat", a.handleChat)
+	a.Mux.HandleFunc("/chats/{chatID}/messages", a.handleChat)
+	a.Mux.HandleFunc("/messages", a.handleGetMessage)
+
 	// a.Mux.HandleFunc("/chat", a.handleMessage) //Eventually needs to handle /chat/[chatID]
 
 	if listener, err := net.Listen("tcp", ":8080"); err != nil {
@@ -63,6 +67,127 @@ type ChatMCPInstance struct {
 	Tools   []MCPInstanceTool
 }
 
+func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
+	messageRows, err := Q.GetMessages(context.Background(), chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	msgHist := []llms.MessageContent{}
+
+	for _, m := range messageRows {
+		if m.TreqName.Valid {
+			// Save tool call req
+			// msgHist = append(msgHist, llms.MessageContent{
+			// 	Role: llms.ChatMessageTypeTool,
+			// 	Parts: []llms.ContentPart{
+			// 		llms.ToolCall{
+			// 			ID:   m.TreqToolCallID.String,
+			// 			Type: "function",
+			// 			FunctionCall: &llms.FunctionCall{
+			// 				Name:      m.TreqName.String,
+			// 				Arguments: m.TreqArgs.String,
+			// 			},
+			// 		},
+			// 	},
+			// })
+			msgHist[len(msgHist)-1].Parts = append(msgHist[len(msgHist)-1].Parts, llms.ToolCall{
+				ID:   m.TreqToolCallID.String,
+				Type: "function",
+				FunctionCall: &llms.FunctionCall{
+					Name:      m.TreqName.String,
+					Arguments: m.TreqArgs.String,
+				},
+			})
+		} else if m.TresName.Valid {
+			// Save tool call res
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: []llms.ContentPart{
+					llms.ToolCallResponse{
+						ToolCallID: m.TresID.String,
+						Name:       m.TresName.String,
+						Content:    m.TresContent.String,
+					},
+				},
+			})
+		} else {
+			// Save regular message
+			msgHist = append(msgHist, llms.TextParts(llms.ChatMessageType(m.Role), m.Content.String))
+		}
+	}
+
+	return msgHist, nil
+}
+
+func (app *App) handleGetMessage(w http.ResponseWriter, r *http.Request) {
+	chatID := r.URL.Query().Get("chatID")
+
+	if chatID == "" {
+		HTTPReturnError(w, ErrorOptions{
+			Err:  "Missing chatID query param",
+			Code: http.StatusBadRequest,
+		})
+	}
+
+	messageRows, err := Q.GetMessages(context.Background(), chatID)
+	if err != nil {
+		HTTPReturnError(w, ErrorOptions{
+			Err:  fmt.Errorf("Failed to get messages for chatID=%s - %w", chatID, err).Error(),
+			Code: http.StatusInternalServerError,
+		})
+	}
+
+	msgHist := []llms.MessageContent{}
+
+	for _, m := range messageRows {
+		if m.TreqName.Valid {
+			// Save tool call req
+			// msgHist = append(msgHist, llms.MessageContent{
+			// 	Role: llms.ChatMessageTypeTool,
+			// 	Parts: []llms.ContentPart{
+			// 		llms.ToolCall{
+			// 			ID:   m.TreqToolCallID.String,
+			// 			Type: "function",
+			// 			FunctionCall: &llms.FunctionCall{
+			// 				Name:      m.TreqName.String,
+			// 				Arguments: m.TreqArgs.String,
+			// 			},
+			// 		},
+			// 	},
+			// })
+			msgHist[len(msgHist)-1].Parts = append(msgHist[len(msgHist)-1].Parts, llms.ToolCall{
+				ID:   m.TreqToolCallID.String,
+				Type: "function",
+				FunctionCall: &llms.FunctionCall{
+					Name:      m.TreqName.String,
+					Arguments: m.TreqArgs.String,
+				},
+			})
+		} else if m.TresName.Valid {
+			// Save tool call res
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: []llms.ContentPart{
+					llms.ToolCallResponse{
+						ToolCallID: m.TresID.String,
+						Name:       m.TresName.String,
+						Content:    m.TresContent.String,
+					},
+				},
+			})
+		} else {
+			// Save regular message
+			msgHist = append(msgHist, llms.TextParts(llms.ChatMessageType(m.Role), m.Content.String))
+		}
+	}
+
+	// ViewObjectAsJSON("MESSAGE HISTORY", messageRows, nil)
+	ViewObjectAsJSON("LANGCHAIN MESSSAGE HISTORY", msgHist, nil)
+
+	HTTPSendJSON(w, msgHist, nil)
+}
+
 func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	//CORS headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -72,11 +197,13 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	//XTRN frontend headers
 	w.Header().Set("Access-Control-Expose-Headers", "x-xtrn-chat-id")
 
+	newChat := false
 	chatID := r.PathValue("chatID")
 	if chatID == "" {
 		// If not chatID then this is the first message - need to init the chat and possibly configure tools specially
 		id, _ := gonanoid.New()
 		chatID = id
+		newChat = true
 	}
 
 	w.Header().Set("x-xtrn-chat-id", chatID)
@@ -100,6 +227,42 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.Logger.Printf("MESSAGE RECIEVED: %s\n", msg.Content)
+
+	tx, _ := DB.BeginTx(context.Background(), nil)
+	qtx := Q.WithTx(tx)
+
+	if newChat {
+		qtx.InsertChat(context.Background(), chatID)
+	}
+
+	msgID, _ := gonanoid.New()
+
+	err = qtx.InsertMessage(context.Background(), db.InsertMessageParams{
+		ID:   msgID,
+		Role: string(llms.ChatMessageTypeHuman),
+		Content: sql.NullString{
+			String: msg.Content,
+			Valid:  msg.Content != "",
+		},
+		StopReason: sql.NullString{
+			String: "",
+			Valid:  false,
+		},
+		ChatID: chatID,
+	})
+
+	if err != nil {
+		fmt.Printf("ERROR INSERTING MESSAGE - %v\n", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		tx.Rollback()
+		HTTPReturnError(w, ErrorOptions{
+			Err: fmt.Errorf("Failed to insert message - %w", err).Error(),
+		})
+		app.ErrLogger.Print(err)
+		return
+	}
 
 	// Fetch MCP instance tools
 	instanceRows, err := Q.GetMCPServerInstances(context.Background())
@@ -162,6 +325,9 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	openAIKey, err := GetEnv("OPENAI_KEY")
+	if err != nil {
+		panic(err)
+	}
 
 	llm, err := openai.New(
 		openai.WithToken(openAIKey),
@@ -174,13 +340,30 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		app.ErrLogger.Print(err)
 	}
 
-	msgHist := []llms.MessageContent{
-		// llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this week. For the week of 7/27/2025?"),
-		llms.TextParts(llms.ChatMessageTypeHuman, "Create an event on my calendar called dinner for this friday at 7pm. For the week of 7/27/2025. I am trying to test out tool calling so the first time you call the create calendar tool do not include a timzeone. On the second call, make the timezone PST. Never ask to proceed for tool calls, just make the tool call request.."),
-		// llms.TextParts(llms.ChatMessageTypeHuman, "Create a calendar event for next week on Friday called dinner"),
+	var msgHist []llms.MessageContent
+
+	if !newChat {
+		msgHist, err = getMessageHistory(chatID)
+		if err != nil {
+			HTTPReturnError(w, ErrorOptions{
+				Err:  fmt.Errorf("Failed to get messages for chatID=%s - %w", chatID, err).Error(),
+				Code: http.StatusInternalServerError,
+			})
+		}
 	}
 
-	fmt.Printf("Checking calendar...")
+	msgHist = append(msgHist, llms.TextParts(llms.ChatMessageTypeHuman, msg.Content))
+
+	// msgHist := []llms.MessageContent{
+	// 	// llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this week. For the week of 7/27/2025?"),
+	// 	// llms.TextParts(llms.ChatMessageTypeHuman, "Create an event on my calendar called dinner for this friday at 7pm. For the week of 7/27/2025. I am trying to test out tool calling so the first time you call the create calendar tool do not include a timzeone. On the second call, make the timezone PST. Never ask to proceed for tool calls, just make the tool call request.."),
+	// 	// llms.TextParts(llms.ChatMessageTypeHuman, "Create a calendar event for next week on Friday called dinner"),
+	// 	llms.TextParts(llms.ChatMessageTypeHuman, msg.Content),
+	// }
+
+	ViewObjectAsJSON("\nMESSAGE HISTORY\n\n", msgHist, nil)
+
+	fmt.Printf("Generating LLM Response...")
 
 	// Get initial response from LLM
 	resp, err := llm.GenerateContent(context.Background(), msgHist, llms.WithTools(tools))
@@ -194,7 +377,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("LLM RESPONSE SUCCEEDED")
 
 	// Add LLM response to msg history
-	msgHist = updateMessageHistory(msgHist, resp)
+	msgHist = updateMessageHistory(chatID, msgHist, resp)
 
 	ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
 
@@ -204,7 +387,14 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 			break // No tools needed so end conversation loop and wait for user to send next message
 		}
 
-		msgHist = execToolCalls(msgHist, resp, toolToAddr)
+		msgHist, err = execToolCalls(chatID, msgHist, resp, toolToAddr)
+		if err != nil {
+			HTTPReturnError(w, ErrorOptions{
+				Err: fmt.Errorf("Failed to save execute tool call - %w", err).Error(),
+			})
+			app.ErrLogger.Print(err)
+			return
+		}
 
 		ViewObjectAsJSON("MSG HIST TOOL", msgHist, nil)
 
@@ -219,25 +409,42 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add LLM response to msg history
-		msgHist = updateMessageHistory(msgHist, resp)
+		msgHist = updateMessageHistory(chatID, msgHist, resp)
 
 		ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
 	}
 
-	HTTPSendJSON(w, msg, &JSONResponseOptions{})
+	HTTPSendJSON(w, msgHist[len(msgHist)-1].Parts, &JSONResponseOptions{})
 }
 
-func updateMessageHistory(messageHistory []llms.MessageContent, resp *llms.ContentResponse) []llms.MessageContent {
+func updateMessageHistory(chatID string, messageHistory []llms.MessageContent, resp *llms.ContentResponse) []llms.MessageContent {
 	respchoice := resp.Choices[0]
 
 	assistantResponse := llms.TextParts(llms.ChatMessageTypeAI, respchoice.Content)
 	for _, tc := range respchoice.ToolCalls {
 		assistantResponse.Parts = append(assistantResponse.Parts, tc)
 	}
+
+	// Save msg to DB
+	msgID, _ := gonanoid.New()
+	Q.InsertMessage(context.Background(), db.InsertMessageParams{
+		ID:   msgID,
+		Role: string(llms.ChatMessageTypeAI),
+		Content: sql.NullString{
+			String: respchoice.Content,
+			Valid:  respchoice.Content != "",
+		},
+		StopReason: sql.NullString{
+			String: respchoice.StopReason,
+			Valid:  respchoice.StopReason != "",
+		},
+		ChatID: chatID,
+	})
+
 	return append(messageHistory, assistantResponse)
 }
 
-func execToolCalls(msgHist []llms.MessageContent, resp *llms.ContentResponse, toolToAddr map[string]string) []llms.MessageContent {
+func execToolCalls(chatID string, msgHist []llms.MessageContent, resp *llms.ContentResponse, toolToAddr map[string]string) ([]llms.MessageContent, error) {
 	fmt.Println("Executing", len(resp.Choices[0].ToolCalls), "tool calls")
 
 	for _, toolCall := range resp.Choices[0].ToolCalls {
@@ -265,8 +472,34 @@ func execToolCalls(msgHist []llms.MessageContent, resp *llms.ContentResponse, to
 
 		fmt.Printf("REQUEST PAYLOAD: %s\n", string(payloadJsonB))
 
-		// args := bytes.NewBufferString(toolCall.FunctionCall.Arguments)
-		// fmt.Printf("ARGS: %s\n", args.String())
+		toolReqTX, _ := DB.BeginTx(context.Background(), nil)
+		toolReqQTX := Q.WithTx(toolReqTX)
+
+		toolReqMsgID, _ := gonanoid.New()
+		toolReqQTX.InsertMessage(context.Background(), db.InsertMessageParams{
+			ID:   toolReqMsgID,
+			Role: string(llms.ChatMessageTypeTool),
+			Content: sql.NullString{
+				String: "",
+				Valid:  false,
+			},
+			StopReason: sql.NullString{
+				String: "",
+				Valid:  false,
+			},
+			ChatID: chatID,
+		})
+		toolReqQTX.InsertToolCallRequest(context.Background(), db.InsertToolCallRequestParams{
+			MessageID:  toolReqMsgID,
+			ToolCallID: toolCall.ID,
+			Name:       toolName[1],
+			Arguments:  toolCall.FunctionCall.Arguments,
+		})
+
+		if err := toolReqTX.Commit(); err != nil {
+			toolReqTX.Rollback()
+			return nil, fmt.Errorf("Failed to save tool call request to DB - %w", err)
+		}
 
 		res, err := http.Post(addr+"/callTool", "application/json", bytes.NewBuffer(payloadJsonB))
 		if err != nil {
@@ -281,12 +514,60 @@ func execToolCalls(msgHist []llms.MessageContent, resp *llms.ContentResponse, to
 			log.Panic(fmt.Errorf("Failed to read request body - %w\n", err))
 		}
 
-		resBody := map[string]any{}
+		// resBody := map[string]any{}
+		resBody := struct {
+			ToolUseID string `json:"tool_use_id"`
+			Content   []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			}
+			IsError bool `json:"is_error"`
+		}{}
+
 		json.Unmarshal(body, &resBody)
 
 		contentB, _ := json.Marshal(resBody)
 
 		fmt.Printf("RAW RESPONSE BODY: %s\n", string(contentB))
+
+		toolResTX, _ := DB.BeginTx(context.Background(), nil)
+		toolResQTX := Q.WithTx(toolResTX)
+
+		toolResMsgID, _ := gonanoid.New()
+		ee := toolResQTX.InsertMessage(context.Background(), db.InsertMessageParams{
+			ID:   toolResMsgID,
+			Role: string(llms.ChatMessageTypeTool),
+			Content: sql.NullString{
+				String: "",
+				Valid:  false,
+			},
+			StopReason: sql.NullString{
+				String: "",
+				Valid:  false,
+			},
+			ChatID: chatID,
+		})
+
+		if ee != nil {
+			fmt.Printf("Insert message res failed - %v\n", ee)
+		}
+
+		e := toolResQTX.InsertToolCallResult(context.Background(), db.InsertToolCallResultParams{
+			MessageID:  toolResMsgID,
+			ToolCallID: toolCall.ID,
+			Name:       toolCall.FunctionCall.Name,
+			Content:    resBody.Content[0].Text,
+			IsError:    resBody.IsError,
+		})
+
+		if e != nil {
+			fmt.Printf("Insert res failed - %v\n", e)
+		}
+
+		if err := toolResTX.Commit(); err != nil {
+			toolResTX.Rollback()
+			return nil, fmt.Errorf("Failed to save tool call response to DB - %w", err)
+		}
 
 		msgHist = append(msgHist, llms.MessageContent{
 			Role: llms.ChatMessageTypeTool,
@@ -300,7 +581,7 @@ func execToolCalls(msgHist []llms.MessageContent, resp *llms.ContentResponse, to
 		})
 	}
 
-	return msgHist
+	return msgHist, nil
 }
 
 func (app *App) StartServer() error {

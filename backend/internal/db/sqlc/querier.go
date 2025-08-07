@@ -13,15 +13,21 @@ type Querier interface {
 	DeleteMCPServerInstance(ctx context.Context, id string) error
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
 	GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInstancesRow, error)
+	GetMessages(ctx context.Context, chatID string) ([]GetMessagesRow, error)
 	GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error)
+	//*********************************
+	InsertChat(ctx context.Context, id string) error
 	//*********************************
 	InsertMCPServerImage(ctx context.Context, arg InsertMCPServerImageParams) error
 	//*********************************
 	InsertMCPServerInstance(ctx context.Context, arg InsertMCPServerInstanceParams) error
 	InsertMCPServerInstanceTool(ctx context.Context, arg InsertMCPServerInstanceToolParams) error
+	InsertMessage(ctx context.Context, arg InsertMessageParams) error
 	//*********************************
 	InsertOauthProvider(ctx context.Context, arg InsertOauthProviderParams) error
 	InsertOauthToken(ctx context.Context, arg InsertOauthTokenParams) error
+	InsertToolCallRequest(ctx context.Context, arg InsertToolCallRequestParams) error
+	InsertToolCallResult(ctx context.Context, arg InsertToolCallResultParams) error
 	UpdateOauthTokenByProivder(ctx context.Context, arg UpdateOauthTokenByProivderParams) error
 }
 

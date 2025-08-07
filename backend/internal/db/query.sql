@@ -104,7 +104,51 @@ FROM
 -- name: DeleteAllMCPinstances :exec
 DELETE FROM mcp_server_instances;
 
--- GROUP BY
---   inst.id,
---   inst.address,
---   img.id;
+/***********************************/
+/*
+Chat Queries
+*/
+-- name: InsertChat :exec
+INSERT INTO
+  chats (id)
+VALUES
+  (?);
+
+-- name: InsertMessage :exec
+INSERT INTO
+  messages (id, role, content, stop_reason, chat_id)
+VALUES
+  (?, ?, ?, ?, ?);
+
+-- name: InsertToolCallRequest :exec
+INSERT INTO
+  tool_call_request (message_id, tool_call_id, name, arguments)
+VALUES
+  (?, ?, ?, ?);
+
+-- name: InsertToolCallResult :exec
+INSERT INTO
+  tool_call_result (message_id, tool_call_id, name, content, is_error)
+VALUES
+  (?, ?, ?, ?, ?);
+
+-- name: GetMessages :many
+SELECT
+  m.id,
+  m.role,
+  m.content,
+  m.stop_reason,
+  m.chat_id,
+  treq.tool_call_id as treq_tool_call_id,
+  treq.name as treq_name,
+  treq.arguments as treq_args,
+  tres.tool_call_id as tres_id,
+  tres.name as tres_name,
+  tres.content as tres_content,
+  tres.is_error as tres_is_error
+FROM
+  messages m
+  LEFT JOIN tool_call_request as treq ON treq.message_id = m.id
+  LEFT JOIN tool_call_result as tres ON tres.message_id = m.id
+WHERE
+  chat_id = ?;
