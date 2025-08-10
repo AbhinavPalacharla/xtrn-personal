@@ -32,6 +32,177 @@ func (q *Queries) DeleteMCPServerInstance(ctx context.Context, id string) error 
 	return err
 }
 
+const getChatMessages = `-- name: GetChatMessages :many
+SELECT
+  m.id, m.role, m.content, m.stop_reason, m.chat_id,
+  CASE
+    WHEN m.role = 'ai' THEN (
+      SELECT
+        json_group_array(p.part_json)
+      FROM
+        (
+          SELECT
+            CASE
+              WHEN amp.type = 'text' THEN json_object(
+                'type',
+                'text',
+                'index',
+                amp.part_index,
+                'text',
+                tp.text
+              )
+              WHEN amp.type = 'function' THEN json_object(
+                'type',
+                'tool_call',
+                'index',
+                amp.part_index,
+                'tool_call_id',
+                tcp.tool_call_id,
+                'name',
+                tcp.name,
+                'arguments',
+                tcp.arguments
+              )
+            END AS part_json
+          FROM
+            ai_message_parts amp
+            LEFT JOIN text_part tp ON tp.message_part_id = amp.id
+            AND amp.type = 'text'
+            LEFT JOIN tool_call_part tcp ON tcp.message_part_id = amp.id
+            AND amp.type = 'function'
+          WHERE
+            amp.message_id = m.id
+          ORDER BY
+            amp.part_index,
+            amp.id
+        ) p
+    )
+  END AS ai_message,
+  CASE
+    WHEN m.role = 'tool' THEN (
+      SELECT
+        json_object(
+          'tool_call_id',
+          t.tool_call_id,
+          'name',
+          t.name,
+          'content',
+          t.content,
+          'is_error',
+          t.is_error
+        )
+      FROM
+        tool_call_result t
+      WHERE
+        t.message_id = m.id
+    )
+  END AS tool_result
+FROM
+  messages m
+WHERE
+  m.chat_id = ?
+ORDER BY
+  m.id
+`
+
+type GetChatMessagesRow struct {
+	ID         string
+	Role       string
+	Content    sql.NullString
+	StopReason sql.NullString
+	ChatID     string
+	AiMessage  interface{}
+	ToolResult interface{}
+}
+
+// *********************************
+func (q *Queries) GetChatMessages(ctx context.Context, chatID string) ([]GetChatMessagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, getChatMessages, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChatMessagesRow
+	for rows.Next() {
+		var i GetChatMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.StopReason,
+			&i.ChatID,
+			&i.AiMessage,
+			&i.ToolResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getChatsWithMessageCount = `-- name: GetChatsWithMessageCount :many
+SELECT
+  c.id,
+  (
+    SELECT
+      COUNT(*)
+    FROM
+      messages m
+    WHERE
+      m.chat_id = c.id
+  ) as message_count
+FROM
+  chats c
+WHERE
+  c.id IN (
+    SELECT
+      chat_id
+    FROM
+      messages
+    GROUP BY
+      chat_id
+    HAVING
+      COUNT(*) > 0
+  )
+ORDER BY
+  message_count DESC
+`
+
+type GetChatsWithMessageCountRow struct {
+	ID           string
+	MessageCount int64
+}
+
+func (q *Queries) GetChatsWithMessageCount(ctx context.Context) ([]GetChatsWithMessageCountRow, error) {
+	rows, err := q.db.QueryContext(ctx, getChatsWithMessageCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChatsWithMessageCountRow
+	for rows.Next() {
+		var i GetChatsWithMessageCountRow
+		if err := rows.Scan(&i.ID, &i.MessageCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMCPServerImage = `-- name: GetMCPServerImage :one
 SELECT
   images.id, images.slug, images.version, images.name, images.docker_image, images.type, images.oauth_provider, images.env_schema,
@@ -132,79 +303,6 @@ func (q *Queries) GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInst
 	return items, nil
 }
 
-const getMessages = `-- name: GetMessages :many
-SELECT
-  m.id,
-  m.role,
-  m.content,
-  m.stop_reason,
-  m.chat_id,
-  treq.tool_call_id as treq_tool_call_id,
-  treq.name as treq_name,
-  treq.arguments as treq_args,
-  tres.tool_call_id as tres_id,
-  tres.name as tres_name,
-  tres.content as tres_content,
-  tres.is_error as tres_is_error
-FROM
-  messages m
-  LEFT JOIN tool_call_request as treq ON treq.message_id = m.id
-  LEFT JOIN tool_call_result as tres ON tres.message_id = m.id
-WHERE
-  chat_id = ?
-`
-
-type GetMessagesRow struct {
-	ID             string
-	Role           string
-	Content        sql.NullString
-	StopReason     sql.NullString
-	ChatID         string
-	TreqToolCallID sql.NullString
-	TreqName       sql.NullString
-	TreqArgs       sql.NullString
-	TresID         sql.NullString
-	TresName       sql.NullString
-	TresContent    sql.NullString
-	TresIsError    sql.NullBool
-}
-
-func (q *Queries) GetMessages(ctx context.Context, chatID string) ([]GetMessagesRow, error) {
-	rows, err := q.db.QueryContext(ctx, getMessages, chatID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetMessagesRow
-	for rows.Next() {
-		var i GetMessagesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Role,
-			&i.Content,
-			&i.StopReason,
-			&i.ChatID,
-			&i.TreqToolCallID,
-			&i.TreqName,
-			&i.TreqArgs,
-			&i.TresID,
-			&i.TresName,
-			&i.TresContent,
-			&i.TresIsError,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getOauthTokenByProvider = `-- name: GetOauthTokenByProvider :one
 SELECT
   id, refresh_token, oauth_provider
@@ -219,6 +317,66 @@ func (q *Queries) GetOauthTokenByProvider(ctx context.Context, oauthProvider str
 	var i OauthToken
 	err := row.Scan(&i.ID, &i.RefreshToken, &i.OauthProvider)
 	return i, err
+}
+
+const getViewChatMessges = `-- name: GetViewChatMessges :many
+SELECT
+  id, role, content, stop_reason, chat_id, ai_message, tool_result
+FROM
+  v_get_chat_messages
+WHERE
+  chat_id = ?
+`
+
+func (q *Queries) GetViewChatMessges(ctx context.Context, chatID string) ([]VGetChatMessage, error) {
+	rows, err := q.db.QueryContext(ctx, getViewChatMessges, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VGetChatMessage
+	for rows.Next() {
+		var i VGetChatMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.StopReason,
+			&i.ChatID,
+			&i.AiMessage,
+			&i.ToolResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertAIMessagePart = `-- name: InsertAIMessagePart :one
+INSERT INTO
+  ai_message_parts (type, part_index, message_id)
+VALUES
+  (?, ?, ?) RETURNING id
+`
+
+type InsertAIMessagePartParams struct {
+	Type      sql.NullString
+	PartIndex int64
+	MessageID string
+}
+
+func (q *Queries) InsertAIMessagePart(ctx context.Context, arg InsertAIMessagePartParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, insertAIMessagePart, arg.Type, arg.PartIndex, arg.MessageID)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertChat = `-- name: InsertChat :exec
@@ -418,26 +576,43 @@ func (q *Queries) InsertOauthToken(ctx context.Context, arg InsertOauthTokenPara
 	return err
 }
 
-const insertToolCallRequest = `-- name: InsertToolCallRequest :exec
+const insertTextPart = `-- name: InsertTextPart :exec
 INSERT INTO
-  tool_call_request (message_id, tool_call_id, name, arguments)
+  text_part (text, message_part_id)
+VALUES
+  (?, ?)
+`
+
+type InsertTextPartParams struct {
+	Text          sql.NullString
+	MessagePartID string
+}
+
+func (q *Queries) InsertTextPart(ctx context.Context, arg InsertTextPartParams) error {
+	_, err := q.db.ExecContext(ctx, insertTextPart, arg.Text, arg.MessagePartID)
+	return err
+}
+
+const insertToolCallPart = `-- name: InsertToolCallPart :exec
+INSERT INTO
+  tool_call_part (tool_call_id, name, arguments, message_part_id)
 VALUES
   (?, ?, ?, ?)
 `
 
-type InsertToolCallRequestParams struct {
-	MessageID  string
-	ToolCallID string
-	Name       string
-	Arguments  string
+type InsertToolCallPartParams struct {
+	ToolCallID    string
+	Name          string
+	Arguments     string
+	MessagePartID string
 }
 
-func (q *Queries) InsertToolCallRequest(ctx context.Context, arg InsertToolCallRequestParams) error {
-	_, err := q.db.ExecContext(ctx, insertToolCallRequest,
-		arg.MessageID,
+func (q *Queries) InsertToolCallPart(ctx context.Context, arg InsertToolCallPartParams) error {
+	_, err := q.db.ExecContext(ctx, insertToolCallPart,
 		arg.ToolCallID,
 		arg.Name,
 		arg.Arguments,
+		arg.MessagePartID,
 	)
 	return err
 }

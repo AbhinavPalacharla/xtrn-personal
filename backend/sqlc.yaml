@@ -17,3 +17,11 @@ sql:
           #   go_type: "github.com/AbhinavPalacharla/xtrn-personal/internal/db/models.MessageType"
           - column: "mcp_server_images.env_schema"
             go_type: "github.com/AbhinavPalacharla/xtrn-personal/internal/db/models.EnvSchema"
+          - column: v_get_chat_messages.tool_result
+            go_type:
+              import: github.com/AbhinavPalacharla/xtrn-personal/internal/db/models/query_types
+              type: ToolResult
+          - column: "v_get_chat_messages.ai_message"
+            go_type:
+              import: github.com/AbhinavPalacharla/xtrn-personal/internal/db/models/query_types
+              type: AIParts

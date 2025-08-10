@@ -2,57 +2,46 @@
 /*
 Models for storing chats
 */
--- CREATE TABLE chats (
---   id TEXT PRIMARY KEY,
---   title TEXT,
---   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
--- );
--- CREATE TABLE messages (
---   id TEXT PRIMARY KEY,
---   chat_id TEXT NOT NULL,
---   role TEXT NOT NULL CHECK (role IN ('USER', 'ASSISTANT')),
---   type TEXT NOT NULL CHECK (
---     type IN ('TEXT', 'TOOL_CALL_REQ', 'TOOL_CALL_RES')
---   ),
---   content TEXT,
---   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
---   FOREIGN KEY (chat_id) REFERENCES chats (id)
--- );
--- CREATE TABLE tool_call_req (
---   message_id PRIMARY KEY,
---   tool_use_id TEXT NOT NULL, -- claude tool use ID
---   name TEXT NOT NULL,
---   arguments TEXT NOT NULL,
---   FOREIGN KEY (message_id) REFERENCES messages (id)
--- );
--- CREATE TABLE tool_call_res (
---   message_id PRIMARY KEY,
---   tool_use_id TEXT NOT NULL, -- claude tool use ID
---   content TEXT NOT NULL,
---   is_error BOOLEAN DEFAULT FALSE,
---   FOREIGN KEY (message_id) REFERENCES messages (id)
--- );
-/****************************************************/
-/*
-Models for storing chats
-*/
 CREATE TABLE chats (id TEXT PRIMARY KEY);
 
+/*
+HUMAN message = check messages.content
+
+AI MESSAGE = JOIN ai_message_parts and join text_parts and tool_call_parts and prcess
+
+TOOL MESSAGE = Check tool_call_result after joining
+*/
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
-  role TEXT NOT NULL,
-  content TEXT, -- NOT USED FOR TOOL CALL TYPE MESSAGES
+  role TEXT NOT NULL CHECK (role in ('human', 'ai', 'tool')),
+  content TEXT, -- ONLY USED FOR HUMAN MESSAGE
   stop_reason TEXT,
   chat_id TEXT NOT NULL,
-  FOREIGN KEY (chat_id) REFERENCES chats (id)
+  FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
 );
 
-CREATE TABLE tool_call_request (
-  message_id TEXT PRIMARY KEY,
+CREATE TABLE ai_message_parts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT CHECK (type IN ('text', 'function')),
+  part_index INTEGER NOT NULL, -- Might be able to just sort on id because AUTOINCREMENT
+  message_id TEXT NOT NULL,
+  FOREIGN KEY (message_id) REFERENCES messages (id) ON DELETE CASCADE
+);
+
+CREATE TABLE text_part (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  text TEXT,
+  message_part_id TEXT NOT NULL,
+  FOREIGN KEY (message_part_id) REFERENCES ai_message_parts (id) ON DELETE CASCADE
+);
+
+CREATE TABLE tool_call_part (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   tool_call_id TEXT NOT NULL,
   name TEXT NOT NULL,
   arguments TEXT NOT NULL,
-  FOREIGN KEY (message_id) REFERENCES messages (id)
+  message_part_id TEXT NOT NULL,
+  FOREIGN KEY (message_part_id) REFERENCES ai_message_parts (id) ON DELETE CASCADE
 );
 
 CREATE TABLE tool_call_result (
@@ -61,8 +50,85 @@ CREATE TABLE tool_call_result (
   name TEXT NOT NULL,
   content TEXT NOT NULL,
   is_error BOOLEAN DEFAULT FALSE NOT NULL,
-  FOREIGN KEY (message_id) REFERENCES messages (id)
+  FOREIGN KEY (message_id) REFERENCES messages (id) ON DELETE CASCADE
 );
+
+CREATE VIEW v_get_chat_messages AS
+SELECT
+  m.id,
+  m.role,
+  m.content,
+  m.stop_reason,
+  m.chat_id,
+  /* ai_message as JSON array */
+  CASE
+    WHEN m.role = 'ai' THEN COALESCE(
+      (
+        SELECT
+          json_group_array(p.part_json)
+        FROM
+          (
+            SELECT
+              CASE
+                WHEN amp.type = 'text' THEN json_object(
+                  'type',
+                  'text',
+                  'index',
+                  amp.part_index,
+                  'text',
+                  tp.text
+                )
+                WHEN amp.type = 'function' THEN json_object(
+                  'type',
+                  'tool_call',
+                  'index',
+                  amp.part_index,
+                  'tool_call_id',
+                  tcp.tool_call_id,
+                  'name',
+                  tcp.name,
+                  'arguments',
+                  tcp.arguments
+                )
+              END AS part_json
+            FROM
+              ai_message_parts amp
+              LEFT JOIN text_part tp ON tp.message_part_id = amp.id
+              AND amp.type = 'text'
+              LEFT JOIN tool_call_part tcp ON tcp.message_part_id = amp.id
+              AND amp.type = 'function'
+            WHERE
+              amp.message_id = m.id
+            ORDER BY
+              amp.part_index,
+              amp.id
+          ) p
+      ),
+      '[]'
+    )
+  END AS ai_message,
+  /* tool_result as JSON object */
+  CASE
+    WHEN m.role = 'tool' THEN (
+      SELECT
+        json_object(
+          'tool_call_id',
+          t.tool_call_id,
+          'name',
+          t.name,
+          'content',
+          t.content,
+          'is_error',
+          t.is_error
+        )
+      FROM
+        tool_call_result t
+      WHERE
+        t.message_id = m.id
+    )
+  END AS tool_result
+FROM
+  messages m;
 
 /****************************************************/
 /*

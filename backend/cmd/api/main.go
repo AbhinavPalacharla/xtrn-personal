@@ -32,6 +32,7 @@ func NewApp() (*App, error) {
 
 	//Configure HTTP Router
 	a.Mux = http.NewServeMux()
+	a.Mux.HandleFunc("/chats", a.handleChat)
 	a.Mux.HandleFunc("/chats/{chatID}/messages", a.handleChat)
 	a.Mux.HandleFunc("/messages", a.handleGetMessage)
 
@@ -67,6 +68,18 @@ type ChatMCPInstance struct {
 	Tools   []MCPInstanceTool
 }
 
+func tmp(chatID string) {
+	rows, err := Q.GetViewChatMessges(context.Background(), chatID)
+	// rows, err := Q.GetChatMessages(context.Background(), chatID)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, r := range rows {
+		_ = r
+	}
+}
+
 func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
 	messageRows, err := Q.GetMessages(context.Background(), chatID)
 	if err != nil {
@@ -75,9 +88,27 @@ func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
 
 	msgHist := []llms.MessageContent{}
 
+	// llmMsgIdx := 0
+
+	var aiMsg *llms.MessageContent = nil
+
 	for _, m := range messageRows {
 		if m.TreqName.Valid {
 			// Save tool call req
+
+			if aiMsg != nil {
+				aiMsg.Parts = append(aiMsg.Parts, llms.ToolCall{
+					ID:   m.TreqToolCallID.String,
+					Type: "function",
+					FunctionCall: &llms.FunctionCall{
+						Name:      m.TreqName.String,
+						Arguments: m.TreqArgs.String,
+					},
+				})
+			} else {
+				panic("NO AI MESSAGE TO ADD TOOL CALL REQ TO")
+			}
+
 			// msgHist = append(msgHist, llms.MessageContent{
 			// 	Role: llms.ChatMessageTypeTool,
 			// 	Parts: []llms.ContentPart{
@@ -91,15 +122,18 @@ func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
 			// 		},
 			// 	},
 			// })
-			msgHist[len(msgHist)-1].Parts = append(msgHist[len(msgHist)-1].Parts, llms.ToolCall{
-				ID:   m.TreqToolCallID.String,
-				Type: "function",
-				FunctionCall: &llms.FunctionCall{
-					Name:      m.TreqName.String,
-					Arguments: m.TreqArgs.String,
-				},
-			})
+			// msgHist[llmMsgIdx].Parts = append(msgHist[llmMsgIdx].Parts, llms.ToolCall{
+			// 	ID:   m.TreqToolCallID.String,
+			// 	Type: "function",
+			// 	FunctionCall: &llms.FunctionCall{
+			// 		Name:      m.TreqName.String,
+			// 		Arguments: m.TreqArgs.String,
+			// 	},
+			// })
 		} else if m.TresName.Valid {
+			// First add ai msg to msgHist
+			msgHist = append(msgHist, *aiMsg)
+
 			// Save tool call res
 			msgHist = append(msgHist, llms.MessageContent{
 				Role: llms.ChatMessageTypeTool,
@@ -112,9 +146,27 @@ func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
 				},
 			})
 		} else {
-			// Save regular message
-			msgHist = append(msgHist, llms.TextParts(llms.ChatMessageType(m.Role), m.Content.String))
+			if m.Role == "ai" {
+				aiMsg = &llms.MessageContent{
+					Role: llms.ChatMessageType(m.Role),
+					Parts: []llms.ContentPart{
+						llms.TextContent{
+							Text: m.Content.String,
+						},
+					},
+				}
+
+				ViewObjectAsJSON("AI MESSAGE", *aiMsg, nil)
+			} else {
+				msgHist = append(msgHist, llms.TextParts(llms.ChatMessageType(m.Role), m.Content.String))
+			}
 		}
+	}
+
+	// If remaining ai msg add it to msg hist
+
+	if aiMsg != nil {
+		msgHist = append(msgHist, *aiMsg)
 	}
 
 	return msgHist, nil
@@ -130,57 +182,7 @@ func (app *App) handleGetMessage(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	messageRows, err := Q.GetMessages(context.Background(), chatID)
-	if err != nil {
-		HTTPReturnError(w, ErrorOptions{
-			Err:  fmt.Errorf("Failed to get messages for chatID=%s - %w", chatID, err).Error(),
-			Code: http.StatusInternalServerError,
-		})
-	}
-
-	msgHist := []llms.MessageContent{}
-
-	for _, m := range messageRows {
-		if m.TreqName.Valid {
-			// Save tool call req
-			// msgHist = append(msgHist, llms.MessageContent{
-			// 	Role: llms.ChatMessageTypeTool,
-			// 	Parts: []llms.ContentPart{
-			// 		llms.ToolCall{
-			// 			ID:   m.TreqToolCallID.String,
-			// 			Type: "function",
-			// 			FunctionCall: &llms.FunctionCall{
-			// 				Name:      m.TreqName.String,
-			// 				Arguments: m.TreqArgs.String,
-			// 			},
-			// 		},
-			// 	},
-			// })
-			msgHist[len(msgHist)-1].Parts = append(msgHist[len(msgHist)-1].Parts, llms.ToolCall{
-				ID:   m.TreqToolCallID.String,
-				Type: "function",
-				FunctionCall: &llms.FunctionCall{
-					Name:      m.TreqName.String,
-					Arguments: m.TreqArgs.String,
-				},
-			})
-		} else if m.TresName.Valid {
-			// Save tool call res
-			msgHist = append(msgHist, llms.MessageContent{
-				Role: llms.ChatMessageTypeTool,
-				Parts: []llms.ContentPart{
-					llms.ToolCallResponse{
-						ToolCallID: m.TresID.String,
-						Name:       m.TresName.String,
-						Content:    m.TresContent.String,
-					},
-				},
-			})
-		} else {
-			// Save regular message
-			msgHist = append(msgHist, llms.TextParts(llms.ChatMessageType(m.Role), m.Content.String))
-		}
-	}
+	msgHist, _ := getMessageHistory(chatID)
 
 	// ViewObjectAsJSON("MESSAGE HISTORY", messageRows, nil)
 	ViewObjectAsJSON("LANGCHAIN MESSSAGE HISTORY", msgHist, nil)
@@ -352,7 +354,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	msgHist = append(msgHist, llms.TextParts(llms.ChatMessageTypeHuman, msg.Content))
+	// msgHist = append(msgHist, llms.TextParts(llms.ChatMessageTypeHuman, msg.Content))
 
 	// msgHist := []llms.MessageContent{
 	// 	// llms.TextParts(llms.ChatMessageTypeHuman, "What is on my calendar this week. For the week of 7/27/2025?"),
@@ -569,13 +571,19 @@ func execToolCalls(chatID string, msgHist []llms.MessageContent, resp *llms.Cont
 			return nil, fmt.Errorf("Failed to save tool call response to DB - %w", err)
 		}
 
+		fmtContent := string(contentB)
+
+		if resBody.IsError {
+			fmtContent = fmt.Sprintf("ERROR: %s", fmtContent)
+		}
+
 		msgHist = append(msgHist, llms.MessageContent{
 			Role: llms.ChatMessageTypeTool,
 			Parts: []llms.ContentPart{
 				llms.ToolCallResponse{
 					ToolCallID: toolCall.ID,
 					Name:       toolCall.FunctionCall.Name,
-					Content:    string(contentB),
+					Content:    fmtContent,
 				},
 			},
 		})

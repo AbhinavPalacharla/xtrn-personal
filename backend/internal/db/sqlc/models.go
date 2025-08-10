@@ -8,7 +8,15 @@ import (
 	"database/sql"
 
 	"github.com/AbhinavPalacharla/xtrn-personal/internal/db/models"
+	"github.com/AbhinavPalacharla/xtrn-personal/internal/db/models/query_types"
 )
+
+type AiMessagePart struct {
+	ID        int64
+	Type      sql.NullString
+	PartIndex int64
+	MessageID string
+}
 
 type Chat struct {
 	ID string
@@ -64,11 +72,18 @@ type OauthToken struct {
 	OauthProvider string
 }
 
-type ToolCallRequest struct {
-	MessageID  string
-	ToolCallID string
-	Name       string
-	Arguments  string
+type TextPart struct {
+	ID            int64
+	Text          sql.NullString
+	MessagePartID string
+}
+
+type ToolCallPart struct {
+	ID            int64
+	ToolCallID    string
+	Name          string
+	Arguments     string
+	MessagePartID string
 }
 
 type ToolCallResult struct {
@@ -77,4 +92,14 @@ type ToolCallResult struct {
 	Name       string
 	Content    string
 	IsError    bool
+}
+
+type VGetChatMessage struct {
+	ID         string
+	Role       string
+	Content    sql.NullString
+	StopReason sql.NullString
+	ChatID     string
+	AiMessage  query_types.AIParts
+	ToolResult query_types.ToolResult
 }
