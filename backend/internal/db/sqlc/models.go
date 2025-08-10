@@ -13,7 +13,7 @@ import (
 
 type AiMessagePart struct {
 	ID        int64
-	Type      sql.NullString
+	Type      string
 	PartIndex int64
 	MessageID string
 }
@@ -75,7 +75,7 @@ type OauthToken struct {
 type TextPart struct {
 	ID            int64
 	Text          sql.NullString
-	MessagePartID string
+	MessagePartID int64
 }
 
 type ToolCallPart struct {
@@ -83,7 +83,7 @@ type ToolCallPart struct {
 	ToolCallID    string
 	Name          string
 	Arguments     string
-	MessagePartID string
+	MessagePartID int64
 }
 
 type ToolCallResult struct {

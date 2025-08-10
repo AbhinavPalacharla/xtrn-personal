@@ -367,7 +367,7 @@ VALUES
 `
 
 type InsertAIMessagePartParams struct {
-	Type      sql.NullString
+	Type      string
 	PartIndex int64
 	MessageID string
 }
@@ -585,7 +585,7 @@ VALUES
 
 type InsertTextPartParams struct {
 	Text          sql.NullString
-	MessagePartID string
+	MessagePartID int64
 }
 
 func (q *Queries) InsertTextPart(ctx context.Context, arg InsertTextPartParams) error {
@@ -604,7 +604,7 @@ type InsertToolCallPartParams struct {
 	ToolCallID    string
 	Name          string
 	Arguments     string
-	MessagePartID string
+	MessagePartID int64
 }
 
 func (q *Queries) InsertToolCallPart(ctx context.Context, arg InsertToolCallPartParams) error {

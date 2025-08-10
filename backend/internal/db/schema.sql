@@ -22,7 +22,7 @@ CREATE TABLE messages (
 
 CREATE TABLE ai_message_parts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  type TEXT CHECK (type IN ('text', 'function')),
+  type TEXT NOT NULL CHECK (type IN ('text', 'function')),
   part_index INTEGER NOT NULL, -- Might be able to just sort on id because AUTOINCREMENT
   message_id TEXT NOT NULL,
   FOREIGN KEY (message_id) REFERENCES messages (id) ON DELETE CASCADE
@@ -31,7 +31,7 @@ CREATE TABLE ai_message_parts (
 CREATE TABLE text_part (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   text TEXT,
-  message_part_id TEXT NOT NULL,
+  message_part_id INTEGER NOT NULL,
   FOREIGN KEY (message_part_id) REFERENCES ai_message_parts (id) ON DELETE CASCADE
 );
 
@@ -40,7 +40,7 @@ CREATE TABLE tool_call_part (
   tool_call_id TEXT NOT NULL,
   name TEXT NOT NULL,
   arguments TEXT NOT NULL,
-  message_part_id TEXT NOT NULL,
+  message_part_id INTEGER NOT NULL,
   FOREIGN KEY (message_part_id) REFERENCES ai_message_parts (id) ON DELETE CASCADE
 );
 
