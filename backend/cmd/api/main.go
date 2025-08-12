@@ -392,23 +392,6 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	/***************** CHAT LOOP *****************/
 
-	// Get chat history
-	// var msgHist []llms.MessageContent
-
-	// msgHist = append(msgHist, llms.TextParts(llms.ChatMessageTypeHuman, msg.Content))
-
-	// if !newChat {
-	// 	msgHist, err = getMessageHistory(chatID)
-	// 	if err != nil {
-	// 		HTTPReturnError(w, ErrorOptions{
-	// 			Err:  fmt.Errorf("Failed to get messages for chatID=%s - %w", chatID, err).Error(),
-	// 			Code: http.StatusInternalServerError,
-	// 		})
-	// 	}
-	// } else {
-
-	// }
-
 	msgHist, err := getMessageHistory(chatID)
 	if err != nil {
 		HTTPReturnError(w, ErrorOptions{
@@ -620,73 +603,143 @@ func execToolCalls(chatID string, msgHist []llms.MessageContent, resp *llms.Cont
 		}
 		defer res.Body.Close()
 
-		// IF RESPONSE HTTP TYPE is 401 then that means the user is needs to re-authenticate.
-		/*
-			Delete user Oauth tokens in DB
-			Delete user MCP server instance
-			Send request to user to re-authenticate (stream JSON object)
-		*/
-
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to read request body - %w", err)
-		}
-
-		var tcRes ToolCallResult
-		json.Unmarshal(body, &tcRes)
-
-		ViewObjectAsJSON("TOOL CALL RESULT", tcRes, nil)
-
-		// Add TC Res to local msg history
-		msgHist = append(msgHist, llms.MessageContent{
-			Role: llms.ChatMessageTypeTool,
-			Parts: func() []llms.ContentPart {
-				parts := []llms.ContentPart{}
-
-				for _, c := range tcRes.Content {
-					parts = append(parts, llms.ToolCallResponse{
-						ToolCallID: tcRes.ToolUseID,
+		if res.StatusCode == http.StatusUnauthorized {
+			// Tool Response
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: []llms.ContentPart{
+					llms.ToolCallResponse{
+						ToolCallID: tc.ID,
 						Name:       tc.FunctionCall.Name,
-						Content:    c.Text,
-					})
-				}
+						Content:    "Function could not be executed because user is unauthorized. User must re-authenticate to continue.",
+					},
+				},
+			})
 
-				return parts
-			}(),
-		})
+			ts := strings.Split(tc.FunctionCall.Name, "___")
+			mcp := ts[0]
 
-		// Add TC Res to DB
-		ctx := context.Background()
+			// System message
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeSystem,
+				Parts: []llms.ContentPart{
+					llms.TextPart(
+						fmt.Sprintf("Tools for the MCP instance `%s` have been disabled. Do not call these functions as they will not work. When the user has re-authenticated you will be notified and can use the tools.", mcp),
+					),
+				},
+			})
 
-		tx, err := DB.BeginTx(ctx, nil)
-		defer tx.Rollback()
-		qtx := Q.WithTx(tx)
+			ctx := context.Background()
+			tx, _ := DB.BeginTx(ctx, nil)
+			defer tx.Rollback()
+			qtx := Q.WithTx(tx)
 
-		msgID, _ := gonanoid.New()
+			// Tool Response to DB
+			tcMsgID, _ := gonanoid.New()
+			qtx.InsertMessage(ctx, db.InsertMessageParams{
+				ID:         tcMsgID,
+				Role:       string(llms.ChatMessageTypeTool),
+				Content:    sql.NullString{Valid: false},
+				StopReason: sql.NullString{Valid: false},
+				ChatID:     chatID,
+			})
+			qtx.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
+				MessageID:  tcMsgID,
+				ToolCallID: tc.ID,
+				Name:       tc.FunctionCall.Name,
+				Content:    "Function could not be executed because user is unauthorized. User must re-authenticate to continue.",
+				IsError:    true,
+			})
 
-		if err := qtx.InsertMessage(ctx, db.InsertMessageParams{
-			ID:         msgID,
-			Role:       string(llms.ChatMessageTypeTool),
-			Content:    sql.NullString{Valid: false},
-			StopReason: sql.NullString{Valid: false},
-			ChatID:     chatID,
-		}); err != nil {
-			return nil, fmt.Errorf("Failed to create message in DB - %w", err)
-		}
+			// System message to DB
+			sysMsgID, _ := gonanoid.New()
+			qtx.InsertMessage(ctx, db.InsertMessageParams{
+				ID:   sysMsgID,
+				Role: string(llms.ChatMessageTypeSystem),
+				Content: sql.NullString{
+					String: fmt.Sprintf("Tools for the MCP instance `%s` have been disabled. Do not call these functions as they will not work. When the user has re-authenticated you will be notified and can use the tools.", mcp),
+					Valid:  true,
+				},
+				StopReason: sql.NullString{
+					Valid: false,
+				},
+				ChatID: chatID,
+			})
 
-		qtx.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
-			MessageID:  msgID,
-			ToolCallID: tc.ID,
-			Name:       tc.FunctionCall.Name,
-			Content: func() string {
-				contentJSONb, _ := json.Marshal(tcRes.Content)
-				return string(contentJSONb)
-			}(),
-			IsError: tcRes.IsError,
-		})
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
 
-		if err := tx.Commit(); err != nil {
-			return nil, fmt.Errorf("Failed to insert tool call response into DB - %w", err)
+		} else {
+
+			// IF RESPONSE HTTP TYPE is 401 then that means the user is needs to re-authenticate.
+			/*
+				Delete user Oauth tokens in DB
+				Delete user MCP server instance
+				Send request to user to re-authenticate (stream JSON object)
+			*/
+
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to read request body - %w", err)
+			}
+
+			var tcRes ToolCallResult
+			json.Unmarshal(body, &tcRes)
+
+			ViewObjectAsJSON("TOOL CALL RESULT", tcRes, nil)
+
+			// Add TC Res to local msg history
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: func() []llms.ContentPart {
+					parts := []llms.ContentPart{}
+
+					for _, c := range tcRes.Content {
+						parts = append(parts, llms.ToolCallResponse{
+							ToolCallID: tcRes.ToolUseID,
+							Name:       tc.FunctionCall.Name,
+							Content:    c.Text,
+						})
+					}
+
+					return parts
+				}(),
+			})
+
+			// Add TC Res to DB
+			ctx := context.Background()
+
+			tx, err := DB.BeginTx(ctx, nil)
+			defer tx.Rollback()
+			qtx := Q.WithTx(tx)
+
+			msgID, _ := gonanoid.New()
+
+			if err := qtx.InsertMessage(ctx, db.InsertMessageParams{
+				ID:         msgID,
+				Role:       string(llms.ChatMessageTypeTool),
+				Content:    sql.NullString{Valid: false},
+				StopReason: sql.NullString{Valid: false},
+				ChatID:     chatID,
+			}); err != nil {
+				return nil, fmt.Errorf("Failed to create message in DB - %w", err)
+			}
+
+			qtx.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
+				MessageID:  msgID,
+				ToolCallID: tc.ID,
+				Name:       tc.FunctionCall.Name,
+				Content: func() string {
+					contentJSONb, _ := json.Marshal(tcRes.Content)
+					return string(contentJSONb)
+				}(),
+				IsError: tcRes.IsError,
+			})
+
+			if err := tx.Commit(); err != nil {
+				return nil, fmt.Errorf("Failed to insert tool call response into DB - %w", err)
+			}
 		}
 	}
 
