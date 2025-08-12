@@ -11,17 +11,28 @@ import (
 type Querier interface {
 	DeleteAllMCPinstances(ctx context.Context) error
 	DeleteMCPServerInstance(ctx context.Context, id string) error
+	//*********************************
+	GetChatMessages(ctx context.Context, chatID string) ([]GetChatMessagesRow, error)
+	GetChatsWithMessageCount(ctx context.Context) ([]GetChatsWithMessageCountRow, error)
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
 	GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInstancesRow, error)
 	GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error)
+	GetViewChatMessges(ctx context.Context, chatID string) ([]VGetChatMessage, error)
+	InsertAIMessagePart(ctx context.Context, arg InsertAIMessagePartParams) (int64, error)
+	//*********************************
+	InsertChat(ctx context.Context, id string) error
 	//*********************************
 	InsertMCPServerImage(ctx context.Context, arg InsertMCPServerImageParams) error
 	//*********************************
 	InsertMCPServerInstance(ctx context.Context, arg InsertMCPServerInstanceParams) error
 	InsertMCPServerInstanceTool(ctx context.Context, arg InsertMCPServerInstanceToolParams) error
+	InsertMessage(ctx context.Context, arg InsertMessageParams) error
 	//*********************************
 	InsertOauthProvider(ctx context.Context, arg InsertOauthProviderParams) error
 	InsertOauthToken(ctx context.Context, arg InsertOauthTokenParams) error
+	InsertTextPart(ctx context.Context, arg InsertTextPartParams) error
+	InsertToolCallPart(ctx context.Context, arg InsertToolCallPartParams) error
+	InsertToolCallResult(ctx context.Context, arg InsertToolCallResultParams) error
 	UpdateOauthTokenByProivder(ctx context.Context, arg UpdateOauthTokenByProivderParams) error
 }
 

@@ -49,16 +49,14 @@ db-reset:
 # Create a new migration: make db-migrate-create name=create_users_table
 db-migrate-create:
 	@if [ -z "$(name)" ]; then \
-		echo "Error: you must provide a name, e.g. make db-migrate-create name=create_users_table"; \
+		echo "Error: you must provide a name, e.g. make db-migrate-create name=<migration_name>"; \
 		exit 1; \
 	else \
 		goose -dir $(MIGRATIONS_DIR) create $(name) sql; \
 	fi
 
-# Migrate up
 db-migrate-up:
 	goose -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) up
 
-# Migrate down
 db-migrate-down:
 	goose -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) down
