@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	db "github.com/AbhinavPalacharla/xtrn-personal/internal/db/sqlc"
 	. "github.com/AbhinavPalacharla/xtrn-personal/internal/shared"
@@ -32,6 +34,7 @@ func NewApp() (*App, error) {
 	a.Mux = http.NewServeMux()
 	a.Mux.HandleFunc("/chats", a.handleChat)
 	a.Mux.HandleFunc("/chats/{chatID}/messages", a.handleChat)
+	a.Mux.HandleFunc("/messages/{chatID}", a.handleGetChatMessages)
 
 	// a.Mux.HandleFunc("/chat", a.handleMessage) //Eventually needs to handle /chat/[chatID]
 
@@ -46,6 +49,161 @@ func NewApp() (*App, error) {
 	a.ErrLogger = loggers.ErrLogger
 
 	return &a, nil
+}
+
+func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
+	msgHist := []llms.MessageContent{}
+
+	messages, err := Q.GetViewChatMessges(context.Background(), chatID)
+	if err != nil {
+		return nil, fmt.Errorf("Could not get messages from DB - %w", err)
+	}
+
+	for _, m := range messages {
+
+		if m.Role == string(llms.ChatMessageTypeHuman) {
+			// Human Message
+
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeHuman,
+				Parts: []llms.ContentPart{
+					llms.TextContent{
+						Text: m.Content.String,
+					},
+				},
+			})
+		} else if m.Role == string(llms.ChatMessageTypeAI) {
+			// AI Message
+
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeAI,
+				Parts: func() []llms.ContentPart {
+					contentParts := []llms.ContentPart{}
+
+					for _, p := range m.AiMessage {
+						if p.Type == "text" {
+							contentParts = append(contentParts, llms.TextContent{
+								Text: func() string {
+									if p.Text != nil {
+										return *p.Text
+									} else {
+										return ""
+									}
+								}(),
+							})
+						} else if p.Type == "function" {
+							contentParts = append(contentParts, llms.ToolCall{
+								ID:   p.ToolCallID,
+								Type: p.Type,
+								FunctionCall: &llms.FunctionCall{
+									Name:      p.Name,
+									Arguments: string(p.Arguments),
+								},
+							})
+						}
+					}
+
+					return contentParts
+				}(),
+			})
+		} else if m.Role == string(llms.ChatMessageTypeTool) {
+			// Tool Message
+
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: []llms.ContentPart{llms.ToolCallResponse{
+					ToolCallID: m.ToolResult.ToolCallID,
+					Name:       m.ToolResult.Name,
+					Content:    string(m.ToolResult.Content),
+				}},
+			})
+		}
+	}
+
+	return msgHist, nil
+}
+
+func (app *App) handleGetChatMessages(w http.ResponseWriter, r *http.Request) {
+	chatID := r.PathValue("chatID")
+
+	messages, err := Q.GetViewChatMessges(context.Background(), chatID)
+	if err != nil {
+		HTTPReturnError(w, ErrorOptions{
+			Err:  fmt.Errorf("Could not get messages - %w", err).Error(),
+			Code: http.StatusBadRequest,
+		})
+		app.ErrLogger.Print(err)
+	}
+
+	ViewObjectAsJSON("RAW MESSAGES", messages, nil)
+	fmt.Print("\n\n\n")
+
+	msgHist := []llms.MessageContent{}
+
+	for _, m := range messages {
+
+		if m.Role == string(llms.ChatMessageTypeHuman) {
+			// Human Message
+
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeHuman,
+				Parts: []llms.ContentPart{
+					llms.TextContent{
+						Text: m.Content.String,
+					},
+				},
+			})
+		} else if m.Role == string(llms.ChatMessageTypeAI) {
+			// AI Message
+
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeAI,
+				Parts: func() []llms.ContentPart {
+					contentParts := []llms.ContentPart{}
+
+					for _, p := range m.AiMessage {
+						if p.Type == "text" {
+							contentParts = append(contentParts, llms.TextContent{
+								Text: func() string {
+									if p.Text != nil {
+										return *p.Text
+									} else {
+										return ""
+									}
+								}(),
+							})
+						} else if p.Type == "function" {
+							contentParts = append(contentParts, llms.ToolCall{
+								ID:   p.ToolCallID,
+								Type: p.Type,
+								FunctionCall: &llms.FunctionCall{
+									Name:      p.Name,
+									Arguments: string(p.Arguments),
+								},
+							})
+						}
+					}
+
+					return contentParts
+				}(),
+			})
+		} else if m.Role == string(llms.ChatMessageTypeTool) {
+			// Tool Message
+
+			msgHist = append(msgHist, llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: []llms.ContentPart{llms.ToolCallResponse{
+					ToolCallID: m.ToolResult.ToolCallID,
+					Name:       m.ToolResult.Name,
+					Content:    string(m.ToolResult.Content),
+				}},
+			})
+		}
+	}
+
+	ViewObjectAsJSON("MESSAGE HISTORY", msgHist, nil)
+
+	HTTPSendJSON(w, msgHist, nil)
 }
 
 type Message struct {
@@ -235,19 +393,29 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	/***************** CHAT LOOP *****************/
 
 	// Get chat history
-	var msgHist []llms.MessageContent
+	// var msgHist []llms.MessageContent
 
-	msgHist = append(msgHist, llms.TextParts(llms.ChatMessageTypeHuman, msg.Content))
+	// msgHist = append(msgHist, llms.TextParts(llms.ChatMessageTypeHuman, msg.Content))
 
 	// if !newChat {
-	// msgHist, err = getMessageHistory(chatID)
-	// if err != nil {
-	// 	HTTPReturnError(w, ErrorOptions{
-	// 		Err:  fmt.Errorf("Failed to get messages for chatID=%s - %w", chatID, err).Error(),
-	// 		Code: http.StatusInternalServerError,
-	// 	})
+	// 	msgHist, err = getMessageHistory(chatID)
+	// 	if err != nil {
+	// 		HTTPReturnError(w, ErrorOptions{
+	// 			Err:  fmt.Errorf("Failed to get messages for chatID=%s - %w", chatID, err).Error(),
+	// 			Code: http.StatusInternalServerError,
+	// 		})
+	// 	}
+	// } else {
+
 	// }
-	// }
+
+	msgHist, err := getMessageHistory(chatID)
+	if err != nil {
+		HTTPReturnError(w, ErrorOptions{
+			Err:  fmt.Errorf("Failed to get messages for chatID=%s - %w", chatID, err).Error(),
+			Code: http.StatusInternalServerError,
+		})
+	}
 
 	// Get initial response from LLM
 	resp, err := llm.GenerateContent(context.Background(), msgHist, llms.WithTools(tools))
@@ -271,48 +439,48 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
+	ViewObjectAsJSON("PRE-TOOLS MSG HIST LLM", msgHist, nil)
 
 	// Execute tool calls
-	// for {
-	// 	// Check if there are any tool calls to execute and execute them
-	// 	if len(resp.Choices[0].ToolCalls) == 0 {
-	// 		break // No tools needed so end conversation loop and wait for user to send next message
-	// 	}
+	for {
+		// Check if there are any tool calls to execute and execute them
+		if len(resp.Choices[0].ToolCalls) == 0 {
+			break // No tools needed so end conversation loop and wait for user to send next message
+		}
 
-	// 	msgHist, err = execToolCalls(chatID, msgHist, resp, toolToAddr)
-	// 	if err != nil {
-	// 		HTTPReturnError(w, ErrorOptions{
-	// 			Err: fmt.Errorf("Failed to save execute tool call - %w", err).Error(),
-	// 		})
-	// 		app.ErrLogger.Print(err)
-	// 		return
-	// 	}
+		msgHist, err = execToolCalls(chatID, msgHist, resp, toolToAddr)
+		if err != nil {
+			HTTPReturnError(w, ErrorOptions{
+				Err: fmt.Errorf("Failed to save execute tool call - %w", err).Error(),
+			})
+			app.ErrLogger.Print(err)
+			return
+		}
 
-	// 	ViewObjectAsJSON("MSG HIST TOOL", msgHist, nil)
+		ViewObjectAsJSON("MSG HIST TOOL", msgHist, nil)
 
-	// 	// Call LLM again with tool call responses
-	// 	resp, err = llm.GenerateContent(context.Background(), msgHist, llms.WithTools(tools))
-	// 	if err != nil {
-	// 		HTTPReturnError(w, ErrorOptions{
-	// 			Err: fmt.Errorf("Failed to get response from LLM - %w", err).Error(),
-	// 		})
-	// 		app.ErrLogger.Print(err)
-	// 		return
-	// 	}
+		// Call LLM again with tool call responses
+		resp, err = llm.GenerateContent(context.Background(), msgHist, llms.WithTools(tools))
+		if err != nil {
+			HTTPReturnError(w, ErrorOptions{
+				Err: fmt.Errorf("Failed to get response from LLM - %w", err).Error(),
+			})
+			app.ErrLogger.Print(err)
+			return
+		}
 
-	// 	// Add LLM response to msg history
-	// 	msgHist, err = updateMessageHistory(context.Background(), chatID, msgHist, resp)
-	// 	if err != nil {
-	// 		HTTPReturnError(w, ErrorOptions{
-	// 			Err: fmt.Errorf("Failed to update message history - %w", err).Error(),
-	// 		})
-	// 		app.ErrLogger.Print(err)
-	// 		return
-	// 	}
+		// Add LLM response to msg history
+		msgHist, err = updateMessageHistory(context.Background(), chatID, msgHist, resp)
+		if err != nil {
+			HTTPReturnError(w, ErrorOptions{
+				Err: fmt.Errorf("Failed to update message history - %w", err).Error(),
+			})
+			app.ErrLogger.Print(err)
+			return
+		}
 
-	// 	ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
-	// }
+		ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
+	}
 
 	HTTPSendJSON(w, msgHist[len(msgHist)-1].Parts, &JSONResponseOptions{})
 }
@@ -405,6 +573,146 @@ func updateMessageHistory(ctx context.Context, chatID string, messageHistory []l
 
 	// Return updated msg hist
 	return append(messageHistory, fmtResp), nil
+}
+
+type ToolCallRequest struct {
+	ToolUseID string         `json:"tool_use_id"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+type ToolCallResult struct {
+	ToolUseID string `json:"tool_use_id"`
+	Content   []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+	IsError bool `json:"is_error"`
+}
+
+func execToolCalls(chatID string, msgHist []llms.MessageContent, resp *llms.ContentResponse, toolToAddr map[string]string) ([]llms.MessageContent, error) {
+	fmt.Println("Executing", len(resp.Choices[0].ToolCalls), "tool calls")
+
+	for _, tc := range resp.Choices[0].ToolCalls {
+		addr := toolToAddr[tc.FunctionCall.Name]
+
+		// PREPARE TC REQUEST
+		var args map[string]any
+		json.Unmarshal([]byte(tc.FunctionCall.Arguments), &args)
+
+		payload := ToolCallRequest{
+			ToolUseID: tc.ID,
+			Name: func() string {
+				funcName := strings.Split(tc.FunctionCall.Name, "___")
+				return funcName[1]
+			}(),
+			Arguments: args,
+		}
+
+		payloadJSONb, _ := json.Marshal(payload)
+
+		ViewObjectAsJSON("REQUEST PAYLOAD", payload, nil)
+
+		// SEND TC REQUEST
+		res, err := http.Post(addr+"/callTool", "application/json", bytes.NewBuffer(payloadJSONb))
+		if err != nil {
+			return nil, fmt.Errorf("Failed to make request to /callTool - %w", err)
+		}
+		defer res.Body.Close()
+
+		// IF RESPONSE HTTP TYPE is 401 then that means the user is needs to re-authenticate.
+		/*
+			Delete user Oauth tokens in DB
+			Delete user MCP server instance
+			Send request to user to re-authenticate (stream JSON object)
+		*/
+
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to read request body - %w", err)
+		}
+
+		var tcRes ToolCallResult
+		json.Unmarshal(body, &tcRes)
+
+		ViewObjectAsJSON("TOOL CALL RESULT", tcRes, nil)
+
+		// Add TC Res to local msg history
+		msgHist = append(msgHist, llms.MessageContent{
+			Role: llms.ChatMessageTypeTool,
+			Parts: func() []llms.ContentPart {
+				parts := []llms.ContentPart{}
+
+				for _, c := range tcRes.Content {
+					parts = append(parts, llms.ToolCallResponse{
+						ToolCallID: tcRes.ToolUseID,
+						Name:       tc.FunctionCall.Name,
+						Content:    c.Text,
+					})
+				}
+
+				return parts
+			}(),
+		})
+
+		// Add TC Res to DB
+		ctx := context.Background()
+
+		tx, err := DB.BeginTx(ctx, nil)
+		defer tx.Rollback()
+		qtx := Q.WithTx(tx)
+
+		msgID, _ := gonanoid.New()
+
+		if err := qtx.InsertMessage(ctx, db.InsertMessageParams{
+			ID:         msgID,
+			Role:       string(llms.ChatMessageTypeTool),
+			Content:    sql.NullString{Valid: false},
+			StopReason: sql.NullString{Valid: false},
+			ChatID:     chatID,
+		}); err != nil {
+			return nil, fmt.Errorf("Failed to create message in DB - %w", err)
+		}
+
+		qtx.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
+			MessageID:  msgID,
+			ToolCallID: tc.ID,
+			Name:       tc.FunctionCall.Name,
+			Content: func() string {
+				contentJSONb, _ := json.Marshal(tcRes.Content)
+				return string(contentJSONb)
+			}(),
+			IsError: tcRes.IsError,
+		})
+
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("Failed to insert tool call response into DB - %w", err)
+		}
+	}
+
+	return msgHist, nil
+}
+
+func (app *App) StartServer() error {
+	app.Logger.Printf("🚀 Starting server on %s\n", app.Listener.Addr().String())
+
+	return http.Serve(app.Listener, app.Mux)
+}
+
+func (app *App) PANIC(reason string) {
+	e := errors.New(reason)
+	app.ErrLogger.Print(e)
+	panic(e)
+}
+
+func main() {
+	a, err := NewApp()
+	if err != nil {
+		fmt.Print(err)
+		a.PANIC(fmt.Errorf("Failed to create new app - %w", err).Error())
+	}
+
+	a.StartServer()
 }
 
 // func execToolCalls(chatID string, msgHist []llms.MessageContent, resp *llms.ContentResponse, toolToAddr map[string]string) ([]llms.MessageContent, error) {
@@ -552,25 +860,3 @@ func updateMessageHistory(ctx context.Context, chatID string, messageHistory []l
 
 // 	return msgHist, nil
 // }
-
-func (app *App) StartServer() error {
-	app.Logger.Printf("🚀 Starting server on %s\n", app.Listener.Addr().String())
-
-	return http.Serve(app.Listener, app.Mux)
-}
-
-func (app *App) PANIC(reason string) {
-	e := errors.New(reason)
-	app.ErrLogger.Print(e)
-	panic(e)
-}
-
-func main() {
-	a, err := NewApp()
-	if err != nil {
-		fmt.Print(err)
-		a.PANIC(fmt.Errorf("Failed to create new app - %w", err).Error())
-	}
-
-	a.StartServer()
-}

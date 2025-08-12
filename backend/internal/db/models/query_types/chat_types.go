@@ -7,15 +7,12 @@ import (
 )
 
 type AIPart struct {
-	Type  string `json:"type"`
-	Index int    `json:"index"`
-
-	// Text part
-	Text string `json:"text,omitempty"`
-	// Tool call part
-	ToolCallID string `json:"tool_call_id,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Arguments  string `json:"arguments,omitempty"`
+	Type       string          `json:"type"`
+	Index      int             `json:"index"`
+	Text       *string         `json:"text,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+	Name       string          `json:"name,omitempty"`
+	Arguments  json.RawMessage `json:"arguments,omitempty"`
 }
 
 type AIParts []AIPart
@@ -56,11 +53,25 @@ func (a AIParts) Value() (driver.Value, error) {
 	return string(b), nil
 }
 
+type IntBool bool
+
+func (b *IntBool) UnmarshalJSON(data []byte) error {
+	switch string(data) {
+	case "true", "1":
+		*b = true
+	case "false", "0":
+		*b = false
+	default:
+		return fmt.Errorf("invalid boolean value: %s", data)
+	}
+	return nil
+}
+
 type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	IsError    bool   `json:"is_error"`
+	ToolCallID string          `json:"tool_call_id"`
+	Name       string          `json:"name"`
+	Content    json.RawMessage `json:"content"`
+	IsError    IntBool         `json:"is_error"`
 }
 
 // Scan implements sql.Scanner for a JSON TEXT column -> ToolResult
@@ -94,67 +105,3 @@ func (t ToolResult) Value() (driver.Value, error) {
 	}
 	return string(b), nil
 }
-
-// package query_types
-
-// import (
-// 	"database/sql/driver"
-// 	"encoding/json"
-// 	"fmt"
-// )
-
-// type AIPart struct {
-// 	Type  string `json:"type"`
-// 	Index int    `json:"index"`
-// 	/*
-// 		Values for parts should all be omitempty because it could be either part
-// 	*/
-
-// 	// Text Part
-// 	Text string `json:"text,omitempty"`
-// 	//Tool Call Part
-// 	ToolCallID string `json:"tool_call_id,omitempty"`
-// 	Name       string `json:"name,omitempty"`
-// 	Arguments  string `json:"arguments,omitempty"`
-// }
-
-// type AIParts []AIPart
-
-// // Auto Unmarshal
-// func (a *AIParts) Scan(value any) error {
-// 	if value == nil {
-// 		*a = nil
-// 		return nil
-// 	}
-// 	if b, ok := value.([]byte); !ok {
-// 		return fmt.Errorf("expected []byte for AIParts, got %T", value)
-// 	} else {
-// 		return json.Unmarshal(b, a)
-// 	}
-// }
-
-// // Auto Marshal
-// func (a AIParts) Value() (driver.Value, error) {
-// 	return json.Marshal(a)
-// }
-
-// type ToolResult struct {
-// 	ToolCallID string `json:"tool_call_id"`
-// 	Name       string `json:"name"`
-// 	Content    string `json:"content"`
-// 	IsError    bool   `json:"is_error"`
-// }
-
-// // Auto Unmarshal
-// func (t *ToolResult) Scan(value any) error {
-// 	if value == nil {
-// 		return nil
-// 	}
-// 	if b, ok := value.([]byte); !ok {
-// 		return fmt.Errorf("expected []byte for ToolResult, got %T", value)
-// 	} else {
-// 		return json.Unmarshal(b, t)
-// 	}
-// }
-
-// // Auto Marshal

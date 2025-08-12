@@ -80,7 +80,7 @@ SELECT
                 )
                 WHEN amp.type = 'function' THEN json_object(
                   'type',
-                  'tool_call',
+                  'function',
                   'index',
                   amp.part_index,
                   'tool_call_id',
