@@ -766,3 +766,175 @@ func main() {
 
 	a.StartServer()
 }
+
+func sendMessageStart(w http.ResponseWriter, flusher http.Flusher) error {
+	msgStartID, _ := gonanoid.New()
+	msgStart := struct {
+		Type      string `json:"type"`
+		MessageID string `json:"messageId"`
+	}{
+		Type:      "start",
+		MessageID: msgStartID,
+	}
+
+	msgStartJSONb, _ := json.Marshal(msgStart)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(msgStartJSONb)); err != nil {
+		return fmt.Errorf("Failed to write message start - %w", err)
+	}
+	flusher.Flush()
+
+	return nil
+}
+
+func sendMessageEnd(w http.ResponseWriter, flusher http.Flusher) error {
+	msgStart := struct {
+		Type string `json:"type"`
+	}{
+		Type: "finish",
+	}
+
+	msgStartJSONb, _ := json.Marshal(msgStart)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(msgStartJSONb)); err != nil {
+		return fmt.Errorf("Failed to write message end - %w", err)
+	}
+	flusher.Flush()
+
+	return nil
+}
+
+func sendStreamTerminate(w http.ResponseWriter, flusher http.Flusher) error {
+	if _, err := fmt.Fprint(w, "data: [DONE]"); err != nil {
+		return fmt.Errorf("Failed to write message end - %w", err)
+	}
+	flusher.Flush()
+
+	return nil
+}
+
+func sendText(content string, w http.ResponseWriter, flusher http.Flusher) error {
+
+	/********** TEXT START **********/
+	textStartID, _ := gonanoid.New()
+	textStart := struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}{
+		Type: "text-start",
+		ID:   textStartID,
+	}
+
+	textStartJSONb, _ := json.Marshal(textStart)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(textStartJSONb)); err != nil {
+		return fmt.Errorf("Failed to write text start - %w", err)
+	}
+	flusher.Flush()
+
+	/********** TEXT DELTA **********/
+
+	textDeltaID, _ := gonanoid.New()
+	textDelta := struct {
+		Type  string `json:"type"`
+		ID    string `json:"id"`
+		Delta string `json:"delta"`
+	}{
+		Type:  "text-start",
+		ID:    textDeltaID,
+		Delta: content,
+	}
+
+	textDeltaJSONb, _ := json.Marshal(textDelta)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(textDeltaJSONb)); err != nil {
+		return fmt.Errorf("Failed to write text delta - %w", err)
+	}
+	flusher.Flush()
+
+	/********** TEXT END **********/
+
+	textEndID, _ := gonanoid.New()
+	textEnd := struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}{
+		Type: "text-start",
+		ID:   textEndID,
+	}
+
+	textEndJSONb, _ := json.Marshal(textEnd)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(textEndJSONb)); err != nil {
+		return fmt.Errorf("Failed to write text end - %w", err)
+	}
+	flusher.Flush()
+
+	return nil
+}
+
+func sendToolCallRequest(toolCallID string, toolName string, toolInput string, w http.ResponseWriter, flusher http.Flusher) error {
+	/********** TOOL INPUT START **********/
+
+	toolInputStart := struct {
+		Type       string `json:"type"`
+		ToolCallID string `json:"toolCallId"`
+		ToolName   string `json:"toolName"`
+	}{
+		Type:       "tool-input-start",
+		ToolCallID: toolCallID,
+		ToolName:   toolName,
+	}
+
+	toolInputStartJSONb, _ := json.Marshal(toolInputStart)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(toolInputStartJSONb)); err != nil {
+		return fmt.Errorf("Failed to write tool input start %s - %w", toolCallID, err)
+	}
+	flusher.Flush()
+
+	/********** TOOL INPUT AVAILABLE **********/
+
+	toolInputAvailable := struct {
+		Type       string `json:"type"`
+		ToolCallID string `json:"toolCallId"`
+		ToolName   string `json:"toolName"`
+		Input      string `json:"input"`
+	}{
+		Type:       "tool-input-available",
+		ToolCallID: toolCallID,
+		ToolName:   toolName,
+		Input:      toolInput,
+	}
+
+	toolInputAvailableJSONb, _ := json.Marshal(toolInputAvailable)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(toolInputAvailableJSONb)); err != nil {
+		return fmt.Errorf("Failed to write tool input available %s - %w", toolCallID, err)
+	}
+	flusher.Flush()
+
+	return nil
+}
+
+func sendToolCallResponse(toolCallID string, output map[string]any, w http.ResponseWriter, flusher http.Flusher) error {
+
+	toolCallOutput := struct {
+		Type       string         `json:"string"`
+		ToolCallID string         `json:"toolCallId"`
+		Output     map[string]any `json:"output"`
+	}{
+		Type:       "tool-output-available",
+		ToolCallID: toolCallID,
+		Output:     output,
+	}
+
+	toolCallOutputJSONb, _ := json.Marshal(toolCallOutput)
+
+	if _, err := fmt.Fprintf(w, "data: %s", string(toolCallOutputJSONb)); err != nil {
+		return fmt.Errorf("Failed to write tool output %s - %w", toolCallID, err)
+	}
+	flusher.Flush()
+
+	return nil
+}
