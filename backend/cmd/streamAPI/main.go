@@ -36,6 +36,7 @@ func NewApp() (*App, error) {
 	a.Mux.HandleFunc("/chats", a.handleChat)                        // SEND MESSAGE
 	a.Mux.HandleFunc("/chats/{chatID}/messages", a.handleChat)      // SEND MESSAGE
 	a.Mux.HandleFunc("/messages/{chatID}", a.handleGetChatMessages) // GET MESSAGE HISTORY
+	a.Mux.HandleFunc("/hello", a.helloHandler)
 
 	if listener, err := net.Listen("tcp", ":8080"); err != nil {
 		return nil, err
@@ -202,7 +203,7 @@ func (app *App) handleGetChatMessages(w http.ResponseWriter, r *http.Request) {
 
 	ViewObjectAsJSON("MESSAGE HISTORY", msgHist, nil)
 
-	HTTPSendJSON(w, msgHist, nil)
+	// HTTPSendJSON(w, msgHist, nil)
 }
 
 type Message struct {
@@ -288,6 +289,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
 
 	//XTRN frontend headers
 	w.Header().Set("Access-Control-Expose-Headers", "x-xtrn-chat-id")
@@ -311,6 +313,8 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		app.ErrLogger.Print(err)
 	}
 	defer r.Body.Close()
+
+	ViewObjectAsJSON("RAW MESSAGE", bodyBytes, nil)
 
 	msg := Message{}
 
@@ -412,7 +416,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	ViewObjectAsJSON("RAW LLM RESPONSE", resp, nil)
 
 	// Add LLM response to msg history
-	msgHist, err = updateMessageHistory(context.Background(), chatID, msgHist, resp)
+	msgHist, err = updateMessageHistory(w, context.Background(), chatID, msgHist, resp)
 	if err != nil {
 		HTTPReturnError(w, ErrorOptions{
 			Err: fmt.Errorf("Failed to update message history - %w", err).Error(),
@@ -452,7 +456,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add LLM response to msg history
-		msgHist, err = updateMessageHistory(context.Background(), chatID, msgHist, resp)
+		msgHist, err = updateMessageHistory(w, context.Background(), chatID, msgHist, resp)
 		if err != nil {
 			HTTPReturnError(w, ErrorOptions{
 				Err: fmt.Errorf("Failed to update message history - %w", err).Error(),
@@ -464,10 +468,10 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		ViewObjectAsJSON("MSG HIST LLM", msgHist, nil)
 	}
 
-	HTTPSendJSON(w, msgHist[len(msgHist)-1].Parts, &JSONResponseOptions{})
+	// HTTPSendJSON(w, msgHist[len(msgHist)-1].Parts, &JSONResponseOptions{})
 }
 
-func updateMessageHistory(ctx context.Context, chatID string, messageHistory []llms.MessageContent, resp *llms.ContentResponse) ([]llms.MessageContent, error) {
+func updateMessageHistory(w http.ResponseWriter, ctx context.Context, chatID string, messageHistory []llms.MessageContent, resp *llms.ContentResponse) ([]llms.MessageContent, error) {
 	respchoice := resp.Choices[0]
 
 	fmtResp := llms.MessageContent{
@@ -490,6 +494,17 @@ func updateMessageHistory(ctx context.Context, chatID string, messageHistory []l
 				},
 			},
 		)
+	}
+
+	/***************** STREAM LLM RESPONSE *****************/
+	sendMessageStart(w)
+
+	// Stream Text Content
+	sendText(respchoice.Content, w)
+
+	// Stream Tool call requests
+	for _, tc := range respchoice.ToolCalls {
+		sendToolCallRequest(tc.ID, tc.FunctionCall.Name, tc.FunctionCall.Arguments, w)
 	}
 
 	/***************** SAVE LLM MESSAGE TO DB *****************/
@@ -767,7 +782,7 @@ func main() {
 	a.StartServer()
 }
 
-func sendMessageStart(w http.ResponseWriter, flusher http.Flusher) error {
+func sendMessageStart(w http.ResponseWriter) error {
 	msgStartID, _ := gonanoid.New()
 	msgStart := struct {
 		Type      string `json:"type"`
@@ -779,15 +794,17 @@ func sendMessageStart(w http.ResponseWriter, flusher http.Flusher) error {
 
 	msgStartJSONb, _ := json.Marshal(msgStart)
 
-	if _, err := fmt.Fprintf(w, "data: %s", string(msgStartJSONb)); err != nil {
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(msgStartJSONb)); err != nil {
 		return fmt.Errorf("Failed to write message start - %w", err)
 	}
+
+	flusher, _ := w.(http.Flusher)
 	flusher.Flush()
 
 	return nil
 }
 
-func sendMessageEnd(w http.ResponseWriter, flusher http.Flusher) error {
+func sendMessageEnd(w http.ResponseWriter) error {
 	msgStart := struct {
 		Type string `json:"type"`
 	}{
@@ -796,84 +813,91 @@ func sendMessageEnd(w http.ResponseWriter, flusher http.Flusher) error {
 
 	msgStartJSONb, _ := json.Marshal(msgStart)
 
-	if _, err := fmt.Fprintf(w, "data: %s", string(msgStartJSONb)); err != nil {
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(msgStartJSONb)); err != nil {
 		return fmt.Errorf("Failed to write message end - %w", err)
 	}
+
+	flusher, _ := w.(http.Flusher)
 	flusher.Flush()
 
 	return nil
 }
 
-func sendStreamTerminate(w http.ResponseWriter, flusher http.Flusher) error {
-	if _, err := fmt.Fprint(w, "data: [DONE]"); err != nil {
+func sendStreamTerminate(w http.ResponseWriter) error {
+	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
 		return fmt.Errorf("Failed to write message end - %w", err)
 	}
+
+	flusher, _ := w.(http.Flusher)
 	flusher.Flush()
 
 	return nil
 }
 
-func sendText(content string, w http.ResponseWriter, flusher http.Flusher) error {
+func sendText(content string, w http.ResponseWriter) error {
+
+	textID, _ := gonanoid.New()
 
 	/********** TEXT START **********/
-	textStartID, _ := gonanoid.New()
 	textStart := struct {
 		Type string `json:"type"`
 		ID   string `json:"id"`
 	}{
 		Type: "text-start",
-		ID:   textStartID,
+		ID:   textID,
 	}
 
 	textStartJSONb, _ := json.Marshal(textStart)
 
-	if _, err := fmt.Fprintf(w, "data: %s", string(textStartJSONb)); err != nil {
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(textStartJSONb)); err != nil {
 		return fmt.Errorf("Failed to write text start - %w", err)
 	}
+
+	flusher, _ := w.(http.Flusher)
 	flusher.Flush()
 
 	/********** TEXT DELTA **********/
 
-	textDeltaID, _ := gonanoid.New()
 	textDelta := struct {
 		Type  string `json:"type"`
 		ID    string `json:"id"`
 		Delta string `json:"delta"`
 	}{
-		Type:  "text-start",
-		ID:    textDeltaID,
+		Type:  "text-delta",
+		ID:    textID,
 		Delta: content,
 	}
 
 	textDeltaJSONb, _ := json.Marshal(textDelta)
 
-	if _, err := fmt.Fprintf(w, "data: %s", string(textDeltaJSONb)); err != nil {
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(textDeltaJSONb)); err != nil {
 		return fmt.Errorf("Failed to write text delta - %w", err)
 	}
+
 	flusher.Flush()
 
 	/********** TEXT END **********/
 
-	textEndID, _ := gonanoid.New()
 	textEnd := struct {
 		Type string `json:"type"`
 		ID   string `json:"id"`
 	}{
-		Type: "text-start",
-		ID:   textEndID,
+		Type: "text-end",
+		ID:   textID,
 	}
 
 	textEndJSONb, _ := json.Marshal(textEnd)
 
-	if _, err := fmt.Fprintf(w, "data: %s", string(textEndJSONb)); err != nil {
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(textEndJSONb)); err != nil {
 		return fmt.Errorf("Failed to write text end - %w", err)
 	}
+
 	flusher.Flush()
 
 	return nil
 }
 
-func sendToolCallRequest(toolCallID string, toolName string, toolInput string, w http.ResponseWriter, flusher http.Flusher) error {
+func sendToolCallRequest(toolCallID string, toolName string, toolInput string, w http.ResponseWriter) error {
 	/********** TOOL INPUT START **********/
 
 	toolInputStart := struct {
@@ -891,6 +915,8 @@ func sendToolCallRequest(toolCallID string, toolName string, toolInput string, w
 	if _, err := fmt.Fprintf(w, "data: %s", string(toolInputStartJSONb)); err != nil {
 		return fmt.Errorf("Failed to write tool input start %s - %w", toolCallID, err)
 	}
+
+	flusher, _ := w.(http.Flusher)
 	flusher.Flush()
 
 	/********** TOOL INPUT AVAILABLE **********/
@@ -912,12 +938,13 @@ func sendToolCallRequest(toolCallID string, toolName string, toolInput string, w
 	if _, err := fmt.Fprintf(w, "data: %s", string(toolInputAvailableJSONb)); err != nil {
 		return fmt.Errorf("Failed to write tool input available %s - %w", toolCallID, err)
 	}
+
 	flusher.Flush()
 
 	return nil
 }
 
-func sendToolCallResponse(toolCallID string, output map[string]any, w http.ResponseWriter, flusher http.Flusher) error {
+func sendToolCallResponse(toolCallID string, output map[string]any, w http.ResponseWriter) error {
 
 	toolCallOutput := struct {
 		Type       string         `json:"string"`
@@ -934,7 +961,44 @@ func sendToolCallResponse(toolCallID string, output map[string]any, w http.Respo
 	if _, err := fmt.Fprintf(w, "data: %s", string(toolCallOutputJSONb)); err != nil {
 		return fmt.Errorf("Failed to write tool output %s - %w", toolCallID, err)
 	}
+
+	flusher, _ := w.(http.Flusher)
 	flusher.Flush()
 
 	return nil
+}
+
+func (app *App) helloHandler(w http.ResponseWriter, r *http.Request) {
+	//CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		HTTPReturnError(w, ErrorOptions{
+			Err: fmt.Errorf("Failed to read request body - %w", err).Error(),
+		})
+		app.ErrLogger.Print(err)
+	}
+	defer r.Body.Close()
+
+	ViewObjectAsJSON("RAW MESSAGE", bodyBytes, nil)
+
+	if err := sendMessageStart(w); err != nil {
+		fmt.Printf("Failed to send message start - %v\n", err)
+	}
+
+	if err := sendText("ping pong", w); err != nil {
+		fmt.Printf("Failed to send text - %v\n", err)
+	}
+
+	if err := sendMessageEnd(w); err != nil {
+		fmt.Printf("Failed to send message end - %v\n", err)
+	}
+
+	if err := sendStreamTerminate(w); err != nil {
+		fmt.Printf("Failed to send stream terminate - %v\n", err)
+	}
 }
