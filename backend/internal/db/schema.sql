@@ -13,7 +13,7 @@ TOOL MESSAGE = Check tool_call_result after joining
 */
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
-  role TEXT NOT NULL CHECK (role in ('human', 'ai', 'tool')),
+  role TEXT NOT NULL CHECK (role in ('human', 'ai', 'tool', 'system')),
   content TEXT, -- ONLY USED FOR HUMAN MESSAGE
   stop_reason TEXT,
   chat_id TEXT NOT NULL,
@@ -65,7 +65,7 @@ SELECT
     WHEN m.role = 'ai' THEN COALESCE(
       (
         SELECT
-          json_group_array(p.part_json)
+          json_group_array(json(p.part_json))
         FROM
           (
             SELECT
@@ -88,7 +88,7 @@ SELECT
                   'name',
                   tcp.name,
                   'arguments',
-                  tcp.arguments
+                  json(tcp.arguments)
                 )
               END AS part_json
             FROM

@@ -11,12 +11,10 @@ import (
 type Querier interface {
 	DeleteAllMCPinstances(ctx context.Context) error
 	DeleteMCPServerInstance(ctx context.Context, id string) error
-	//*********************************
-	GetChatMessages(ctx context.Context, chatID string) ([]GetChatMessagesRow, error)
-	GetChatsWithMessageCount(ctx context.Context) ([]GetChatsWithMessageCountRow, error)
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
 	GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInstancesRow, error)
 	GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error)
+	//*********************************
 	GetViewChatMessges(ctx context.Context, chatID string) ([]VGetChatMessage, error)
 	InsertAIMessagePart(ctx context.Context, arg InsertAIMessagePartParams) (int64, error)
 	//*********************************
