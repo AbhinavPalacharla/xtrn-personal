@@ -5,16 +5,17 @@ import { google } from "googleapis";
 import { NewMCPResponse } from "../utils/error";
 
 export const schema = {
-  to: z.string().describe("Recipient email address"),
-  subject: z.string().describe("Email subject line"),
-  body: z.string().describe("Email body content"),
-  cc: z.string().optional().describe("CC recipient email address"),
-  bcc: z.string().optional().describe("BCC recipient email address"),
+  to: z.array(z.string().email()).describe("Array of recipient email addresses (required)"),
+  subject: z.string().min(1).describe("Email subject line (required, cannot be empty)"),
+  body: z.string().min(1).describe("Email body content in plain text (required, cannot be empty)"),
+  cc: z.array(z.string().email()).optional().describe("Array of CC recipient email addresses (optional)"),
+  bcc: z.array(z.string().email()).optional().describe("Array of BCC recipient email addresses (optional)"),
+  replyTo: z.string().email().optional().describe("Reply-to email address (optional, defaults to sender)"),
 };
 
 export const metadata = {
   name: "send_email",
-  description: "Sends an email using Gmail",
+  description: "Sends an email using Gmail with support for multiple recipients, CC, BCC, and reply-to addresses",
   annotations: {
     title: "Send Gmail email",
     readOnlyHint: false,
@@ -28,10 +29,11 @@ export default async function sendEmail(args: InferSchema<typeof schema>) {
 
   // Create email message
   const message = [
-    `To: ${args.to}`,
+    `To: ${args.to.join(", ")}`,
     `Subject: ${args.subject}`,
-    ...(args.cc ? [`Cc: ${args.cc}`] : []),
-    ...(args.bcc ? [`Bcc: ${args.bcc}`] : []),
+    ...(args.cc && args.cc.length > 0 ? [`Cc: ${args.cc.join(", ")}`] : []),
+    ...(args.bcc && args.bcc.length > 0 ? [`Bcc: ${args.bcc.join(", ")}`] : []),
+    ...(args.replyTo ? [`Reply-To: ${args.replyTo}`] : []),
     "",
     args.body,
   ].join("\n");

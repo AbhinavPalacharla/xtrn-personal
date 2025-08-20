@@ -3,12 +3,12 @@ import { type InferSchema } from "xmcp";
 import { NewMCPResponse } from "../utils/error";
 
 export const schema = {
-  name: z.string().optional().describe("Name to greet (optional)"),
+  name: z.string().min(1).max(100).optional().describe("Name to greet (optional, 1-100 characters). If provided, will personalize the greeting message"),
 };
 
 export const metadata = {
   name: "greet",
-  description: "A simple greeting tool to test the Gmail MCP server",
+  description: "A simple greeting tool to test the Gmail MCP server functionality and verify authentication is working properly",
   annotations: {
     title: "Greet user",
     readOnlyHint: true,
