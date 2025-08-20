@@ -18,6 +18,15 @@ func main() {
 		fmt.Printf("✅ Created Google Calendar Instance %v: 🚀%s\n", googleCalendarInstance.InstanceID, googleCalendarInstance.Address)
 	}
 
+	gmailEnv := mcp_server_images.NewGmailEnv("user@example.com")
+	gmailInstance, err := mcp_server_instances.NewGmailInstance(gmailEnv)
+
+	if err != nil {
+		StdErrLogger.Fatal(fmt.Errorf("%w", err))
+	} else {
+		fmt.Printf("✅ Created Gmail Instance %v: 🚀%s\n", gmailInstance.InstanceID, gmailInstance.Address)
+	}
+
 	// airbnbEnv := mcp_server_images.NewAirBNBEnv()
 	// airbnbInstance, err := mcp_server_instances.NewAirBNBInstance(airbnbEnv)
 

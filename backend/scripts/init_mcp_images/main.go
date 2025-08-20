@@ -16,6 +16,14 @@ func main() {
 		fmt.Print("✅ Created Google Calendar Image\n")
 	}
 
+	gmailImage, err := mcp_server_images.NewGmailImage()
+
+	if err != nil {
+		StdErrLogger.Fatal(err)
+	} else {
+		fmt.Print("✅ Created Gmail Image\n")
+	}
+
 	airBNBImage, err := mcp_server_images.NewAirBNBImage()
 
 	if err != nil {
@@ -25,5 +33,6 @@ func main() {
 	}
 
 	_ = googleCalendarImage
+	_ = gmailImage
 	_ = airBNBImage
 }

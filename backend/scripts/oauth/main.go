@@ -17,6 +17,7 @@ import (
 
 var googleSignin = oauth_provider.GoogleSigninOauthProvider
 var googleCalendar = oauth_provider.GoogleCalendarOauthProvider
+var gmail = oauth_provider.GmailOauthProvider
 
 type Server struct {
 	sessionStore *sessions.CookieStore
@@ -27,6 +28,7 @@ func ConfigureGoth(s *Server) error {
 	goth.UseProviders(
 		googleSignin.GothProvider,
 		googleCalendar.GothProvider,
+		gmail.GothProvider,
 	)
 
 	gothic.Store = s.sessionStore
@@ -136,11 +138,12 @@ func main() {
 		StdErrLogger.Panicf("%v", err)
 	}
 
-	fmt.Println(googleSignin.Name, googleCalendar.Name)
+	fmt.Println(googleSignin.Name, googleCalendar.Name, gmail.Name)
 
 	// Routes
 	createOauthHandlers(googleSignin.Name)
 	createOauthHandlers(googleCalendar.Name)
+	createOauthHandlers(gmail.Name)
 	// http.HandleFunc("/auth/google-signin", beginAuthHandler("google-signin"))
 	// http.HandleFunc("/auth/google-calendar", beginAuthHandler("google-calendar"))
 	// http.HandleFunc("/auth/google-signin/callback", handleCallbackHandler("google-signin"))
@@ -149,6 +152,7 @@ func main() {
 	fmt.Println("Open one of these in your browser:")
 	fmt.Println("  http://localhost:8080/auth/google-signin")
 	fmt.Println("  http://localhost:8080/auth/google-calendar")
+	fmt.Println("  http://localhost:8080/auth/gmail")
 
 	StdErrLogger.Fatal(http.ListenAndServe(":8080", nil))
 }
