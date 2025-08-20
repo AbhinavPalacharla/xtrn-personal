@@ -1,0 +1,29 @@
+{
+  "name": "xmcp-google-calendar-with-notifications",
+  "version": "0.2.0",
+  "description": "An XMCP Google Calendar application with notification/reminder support",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "xmcp build",
+    "dev": "xmcp dev",
+    "start": "node dist/stdio.js"
+  },
+  "dependencies": {
+    "google-auth-library": "^10.1.0",
+    "googleapis": "^153.0.0",
+    "xmcp": "^0.1.6",
+    "zod": "3.24.4"
+  },
+  "devDependencies": {
+    "swc-loader": "^0.2.6"
+  },
+  "main": "./dist/stdio.js",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "xmcp-google-calendar-with-notifications": "./dist/stdio.js"
+  }
+}
