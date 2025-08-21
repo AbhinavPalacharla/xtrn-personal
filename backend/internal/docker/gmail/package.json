@@ -1,7 +1,7 @@
 {
   "name": "xmcp-gmail",
   "version": "0.1.0",
-  "description": "A Gmail MCP server with email management tools",
+  "description": "A comprehensive Gmail MCP server with advanced email management, label organization, and attachment handling tools",
   "engines": {
     "node": ">=20.0.0"
   },
