@@ -32,10 +32,10 @@ func NewApp() (*App, error) {
 	//Configure HTTP Router
 	a.Mux = http.NewServeMux()
 	//TODO: NEED TO FIGURE OUT BETTER PATHS FOR ROUTES
-	a.Mux.HandleFunc("/chats", a.handleChat)                        // SEND MESSAGE
-	a.Mux.HandleFunc("/chats/{chatID}/messages", a.handleChat)      // SEND MESSAGE
-	a.Mux.HandleFunc("/messages/{chatID}", a.handleGetChatMessages) // GET MESSAGE HISTORY
-	a.Mux.HandleFunc("/hello", a.helloHandler)
+	a.Mux.HandleFunc("/chats", CORSMiddleware(a.handleChat))                   // SEND MESSAGE
+	a.Mux.HandleFunc("/chats/{chatID}/messages", CORSMiddleware(a.handleChat)) // SEND MESSAGE
+	a.Mux.HandleFunc("/messages/{chatID}", a.handleGetChatMessages)            // GET MESSAGE HISTORY
+	a.Mux.HandleFunc("/hello", CORSMiddleware(a.helloHandler))
 
 	if listener, err := net.Listen("tcp", ":8080"); err != nil {
 		return nil, err
@@ -50,11 +50,26 @@ func NewApp() (*App, error) {
 	return &a, nil
 }
 
+func CORSMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Chat-ID")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "x-vercel-ai-ui-message-stream, x-xtrn-chat-id")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
 	msgHist := []llms.MessageContent{}
 
 	fmt.Printf("DEBUG: Getting message history for chatID: %s\n", chatID)
-	
+
 	messages, err := Q.GetViewChatMessges(context.Background(), chatID)
 	if err != nil {
 		fmt.Printf("DEBUG: Error from Q.GetViewChatMessges: %v\n", err)
@@ -240,10 +255,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Access-Control-Allow-Methods", "*")
 	w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
-	w.Header().Set("Access-Control-Expose-Headers", "x-vercel-ai-ui-message-stream")
-
-	//XTRN frontend headers
-	// w.Header().Set("Access-Control-Expose-Headers", "x-xtrn-chat-id")
+	w.Header().Set("Access-Control-Expose-Headers", "x-vercel-ai-ui-message-stream, x-xtrn-chat-id")
 
 	newChat := false
 	chatID := r.PathValue("chatID")
@@ -254,7 +266,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		newChat = true
 	}
 
-	// w.Header().Set("x-xtrn-chat-id", chatID)
+	w.Header().Set("x-xtrn-chat-id", chatID)
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -267,9 +279,9 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	ViewObjectAsJSON("RAW MESSAGE", bodyBytes, nil)
 
-	msg := Message{}
+	// msg := Message{}
 
-	// msg := VercelRequest{}
+	msg := VercelRequest{}
 
 	if err := json.Unmarshal(bodyBytes, &msg); err != nil {
 		HTTPReturnError(w, ErrorOptions{
@@ -280,10 +292,6 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ViewObjectAsJSON("MESSAGE RECIEVED", msg, nil)
-
-	// if msg.Message.Parts == nil {
-	// 	return
-	// }
 
 	/***************** INITIALIZATION *****************/
 	ctx := context.Background()
@@ -298,33 +306,12 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := services.CreateHumanMessage(services.CreateHumanMessageArgs{
-		ChatID: chatID,
-		// Content: msg.Message.Parts[0].Text,
-		Content: msg.Content,
+		ChatID:  chatID,
+		Content: msg.Message.Parts[0].Text,
+		// Content: msg.Content,
 	}, qtx, ctx); err != nil {
 		fmt.Printf("ERROR INSERTING MESSAGE - %v\n", err)
 	}
-
-	// msgID, _ := gonanoid.New()
-
-	// // Add message to chat
-	// err = qtx.InsertMessage(context.Background(), db.InsertMessageParams{
-	// 	ID:   msgID,
-	// 	Role: string(llms.ChatMessageTypeHuman),
-	// 	Content: sql.NullString{
-	// 		String: msg.Message.Parts[0].Text,
-	// 		Valid:  msg.Message.Parts[0].Text != "",
-	// 	},
-	// 	StopReason: sql.NullString{
-	// 		String: "",
-	// 		Valid:  false,
-	// 	},
-	// 	ChatID: chatID,
-	// })
-
-	// if err != nil {
-	// 	fmt.Printf("ERROR INSERTING MESSAGE - %v\n", err)
-	// }
 
 	if err = tx.Commit(); err != nil {
 		HTTPReturnError(w, ErrorOptions{
@@ -463,52 +450,21 @@ func updateMessageHistory(w http.ResponseWriter, ctx context.Context, chatID str
 	}
 
 	/***************** STREAM LLM RESPONSE *****************/
-	_ = w
-	// sendMessageStart(w)
+	// _ = w
+	sendMessageStart(w)
 
 	// Stream Text Content
-	// sendText(respchoice.Content, w)
+	sendText(respchoice.Content, w)
 
 	// Stream Tool call requests
-	// for _, tc := range respchoice.ToolCalls {
-	// 	sendToolCallRequest(tc.ID, tc.FunctionCall.Name, tc.FunctionCall.Arguments, w)
-	// }
+	for _, tc := range respchoice.ToolCalls {
+		sendToolCallRequest(tc.ID, tc.FunctionCall.Name, tc.FunctionCall.Arguments, w)
+	}
 
 	/***************** SAVE LLM MESSAGE TO DB *****************/
 	tx, _ := DB.BeginTx(ctx, nil)
 	defer tx.Rollback()
 	qtx := Q.WithTx(tx)
-
-	// Insert base message
-	// msgID, _ := gonanoid.New()
-	// if err := qtx.InsertMessage(ctx, db.InsertMessageParams{
-	// 	ID:         msgID,
-	// 	Role:       string(fmtResp.Role),
-	// 	Content:    sql.NullString{Valid: false},
-	// 	StopReason: sql.NullString{String: respchoice.StopReason, Valid: respchoice.StopReason != ""},
-	// 	ChatID:     chatID,
-	// }); err != nil {
-	// 	return nil, fmt.Errorf("Failed to insert message - %w", err)
-	// }
-
-	// Insert text part
-	// AITextMsgPartID, err := qtx.InsertAIMessagePart(ctx, db.InsertAIMessagePartParams{
-	// 	Type:      "text",
-	// 	PartIndex: 0,
-	// 	MessageID: msgID,
-	// })
-	// if err != nil {
-	// 	return nil, fmt.Errorf("Failed to insert AI message part - %w", err)
-	// }
-	// if err := qtx.InsertTextPart(ctx, db.InsertTextPartParams{
-	// 	Text: sql.NullString{
-	// 		String: fmtResp.Parts[0].(llms.TextContent).Text,
-	// 		Valid:  fmtResp.Parts[0].(llms.TextContent).Text != "",
-	// 	},
-	// 	MessagePartID: AITextMsgPartID,
-	// }); err != nil {
-	// 	return nil, fmt.Errorf("Failed to insert text part - %w", err)
-	// }
 
 	//Create Base Message
 	msgID, err := services.CreateAIMessage(services.CreateAIMessageArgs{
@@ -528,27 +484,6 @@ func updateMessageHistory(w http.ResponseWriter, ctx context.Context, chatID str
 			return nil, fmt.Errorf("Failed to text part - %w", err)
 		}
 	}
-
-	// Insert tool calls
-	// for i, tc := range respchoice.ToolCalls {
-	// 	AIToolMsgPartID, err := qtx.InsertAIMessagePart(ctx, db.InsertAIMessagePartParams{
-	// 		Type:      tc.Type, // Should be function in most cases
-	// 		PartIndex: int64(i + 1),
-	// 		MessageID: msgID,
-	// 	})
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("Failed to insert AI message part - %w", err)
-	// 	}
-
-	// 	if err := qtx.InsertToolCallPart(ctx, db.InsertToolCallPartParams{
-	// 		ToolCallID:    tc.ID,
-	// 		Name:          tc.FunctionCall.Name,
-	// 		Arguments:     tc.FunctionCall.Arguments,
-	// 		MessagePartID: AIToolMsgPartID,
-	// 	}); err != nil {
-	// 		return nil, fmt.Errorf("Failed to insert tool call part - %w", err)
-	// 	}
-	// }
 
 	fmt.Println("INSERTING TOOL CALL REQ PARTS")
 
@@ -656,23 +591,6 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 			defer tx.Rollback()
 			qtx := Q.WithTx(tx)
 
-			// Tool Response to DB
-			// tcMsgID, _ := gonanoid.New()
-			// qtx.InsertMessage(ctx, db.InsertMessageParams{
-			// 	ID:         tcMsgID,
-			// 	Role:       string(llms.ChatMessageTypeTool),
-			// 	Content:    sql.NullString{Valid: false},
-			// 	StopReason: sql.NullString{Valid: false},
-			// 	ChatID:     chatID,
-			// })
-			// qtx.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
-			// 	MessageID:  tcMsgID,
-			// 	ToolCallID: tc.ID,
-			// 	Name:       tc.FunctionCall.Name,
-			// 	Content:    "Function could not be executed because user is unauthorized. User must re-authenticate to continue.",
-			// 	IsError:    true,
-			// })
-
 			services.InsertToolCallResult(services.InsertToolCallResultArgs{
 				ChatID:        chatID,
 				ToolCallID:    tc.ID,
@@ -681,21 +599,7 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 				IsError:       true,
 			}, qtx, ctx)
 
-			// System message to DB
-			// sysMsgID, _ := gonanoid.New()
-			// qtx.InsertMessage(ctx, db.InsertMessageParams{
-			// 	ID:   sysMsgID,
-			// 	Role: string(llms.ChatMessageTypeSystem),
-			// 	Content: sql.NullString{
-			// 		String: fmt.Sprintf("Tools for the MCP instance `%s` have been disabled. Do not call these functions as they will not work. When the user has re-authenticated you will be notified and can use the tools.", mcp),
-			// 		Valid:  true,
-			// 	},
-			// 	StopReason: sql.NullString{
-			// 		Valid: false,
-			// 	},
-			// 	ChatID: chatID,
-			// })
-
+			// Add system message for auth error
 			services.CreateSystemMessage(services.CreateSystemMessageArgs{
 				ChatID:  chatID,
 				Content: fmt.Sprintf("Tools for the MCP instance `%s` have been disabled. Do not call these functions as they will not work. When the user has re-authenticated you will be notified and can use the tools.", mcp),
@@ -716,9 +620,9 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 
 			ViewObjectAsJSON("TOOL CALL RESULT", tcRes, nil)
 
-			// vercelResContent, _ := json.Marshal(tcRes.Content)
+			vercelResContent, _ := json.Marshal(tcRes.Content)
 
-			// sendToolCallResponse(tcRes.ToolUseID, string(vercelResContent), w)
+			sendToolCallResponse(tcRes.ToolUseID, string(vercelResContent), w)
 
 			// Add TC Res to local msg history
 			msgHist = append(msgHist, llms.MessageContent{
@@ -740,34 +644,6 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 
 			// Add TC Res to DB
 			ctx := context.Background()
-
-			// tx, err := DB.BeginTx(ctx, nil)
-			// defer tx.Rollback()
-			// qtx := Q.WithTx(tx)
-
-			// msgID, _ := gonanoid.New()
-
-			// if err := qtx.InsertMessage(ctx, db.InsertMessageParams{
-			// 	ID:         msgID,
-			// 	Role:       string(llms.ChatMessageTypeTool),
-			// 	Content:    sql.NullString{Valid: false},
-			// 	StopReason: sql.NullString{Valid: false},
-			// 	ChatID:     chatID,
-			// }); err != nil {
-			// 	return nil, fmt.Errorf("Failed to create message in DB - %w", err)
-			// }
-
-			// qtx.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
-			// 	MessageID:  msgID,
-			// 	ToolCallID: tc.ID,
-			// 	Name:       tc.FunctionCall.Name,
-			// 	Content: func() string {
-			// 		contentJSONb, _ := json.Marshal(tcRes.Content)
-			// 		return string(contentJSONb)
-			// 	}(),
-			// 	IsError: tcRes.IsError,
-			// })
-
 			if err := services.InsertToolCallResult(services.InsertToolCallResultArgs{
 				ChatID:     chatID,
 				ToolCallID: tc.ID,
@@ -780,10 +656,6 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 			}, nil, ctx); err != nil {
 				return nil, fmt.Errorf("Failed to insert tool call response into DB - %w", err)
 			}
-
-			// if err := tx.Commit(); err != nil {
-			// 	return nil, fmt.Errorf("Failed to insert tool call response into DB - %w", err)
-			// }
 		}
 	}
 

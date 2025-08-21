@@ -13,10 +13,21 @@ TOOL MESSAGE = Check tool_call_result after joining
 */
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
-  role TEXT NOT NULL CHECK (role in ('human', 'ai', 'tool', 'system')),
+  role TEXT NOT NULL CHECK (
+    role in ('human', 'ai', 'tool', 'system', 'xtrn_auth')
+  ),
   content TEXT, -- ONLY USED FOR HUMAN MESSAGE
   stop_reason TEXT,
   chat_id TEXT NOT NULL,
+  FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+);
+
+CREATE TABLE chat_auth_requests (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NUTT CHECK status in ('OPEN', 'COMPLETE', 'REJECTED'),
+  oauth_provider_id TEXT NOT NULL,
+  FOREIGN KEY (provider_id) REFERENCES oauth_providers (id) ON DELETE CASCADE,
+  chat_id TEXT NTO NULL,
   FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
 );
 

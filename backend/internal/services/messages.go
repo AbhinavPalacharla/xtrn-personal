@@ -144,7 +144,7 @@ func InsertAITextPart(args InsertAITextPartArgs, Q *db.Queries, ctx context.Cont
 		return fmt.Errorf("Failed to insert text part - %w", err)
 	}
 
-	if Q == nil {
+	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("Failed to commit text part to DB - %w", err)
 		}
@@ -201,7 +201,7 @@ func InsertAIToolCallRequestPart(args InsertAIToolCallRequestPartArgs, Q *db.Que
 		return fmt.Errorf("Failed to insert tool call req part - %w", err)
 	}
 
-	if Q == nil {
+	if tx != nil {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("Failed to commit tool call req part to DB - %w", err)
 		}
@@ -236,14 +236,17 @@ func InsertToolCallResult(args InsertToolCallResultArgs, Q *db.Queries, ctx cont
 	}
 
 	id, _ := gonanoid.New()
-	Q.InsertMessage(ctx, db.InsertMessageParams{
+	if err := Q.InsertMessage(ctx, db.InsertMessageParams{
 		ID:         id,
 		Role:       string(llms.ChatMessageTypeTool),
 		Content:    sql.NullString{Valid: false},
 		StopReason: sql.NullString{Valid: false},
 		ChatID:     args.ChatID,
-	})
-	Q.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
+	}); err != nil {
+		return fmt.Errorf("Failed to insert tool call result message - %w", err)
+	}
+	
+	if err := Q.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
 		MessageID:  id,
 		ToolCallID: args.ToolCallID,
 		Name:       args.ToolName,
@@ -255,11 +258,13 @@ func InsertToolCallResult(args InsertToolCallResultArgs, Q *db.Queries, ctx cont
 			return args.ResultContent
 		}(),
 		IsError: args.IsError,
-	})
+	}); err != nil {
+		return fmt.Errorf("Failed to insert tool call result - %w", err)
+	}
 
-	if Q == nil {
+	if tx != nil {
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("Failed to commit tool call req part to DB - %w", err)
+			return fmt.Errorf("Failed to commit tool call result to DB - %w", err)
 		}
 	}
 
