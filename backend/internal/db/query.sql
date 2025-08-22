@@ -144,11 +144,25 @@ INSERT INTO
 VALUES
   (?, ?, ?, ?, ?);
 
+-- name: InsertAuthRequest :exec
+INSERT INTO
+  chat_auth_requests (id, status, oauth_provider_name, chat_id)
+VALUES
+  (?, ?, ?, ?);
+
 /***********************************/
 -- name: GetViewChatMessges :many
 SELECT
   *
 FROM
   v_get_chat_messages
+WHERE
+  chat_id = ?;
+
+-- name: GetChatWithAuthAndMessages :one
+SELECT
+  *
+FROM
+  v_get_chat_with_auth_and_messages
 WHERE
   chat_id = ?;

@@ -25,3 +25,11 @@ sql:
             go_type:
               import: github.com/AbhinavPalacharla/xtrn-personal/internal/db/models/query_types
               type: AIParts
+          - column: "v_get_chat_with_auth_and_messages.auth_requests"
+            go_type:
+              import: github.com/AbhinavPalacharla/xtrn-personal/internal/db/models/query_types
+              type: AuthRequests
+          - column: "v_get_chat_with_auth_and_messages.messages"
+            go_type:
+              import: github.com/AbhinavPalacharla/xtrn-personal/internal/db/models/query_types
+              type: ChatMessages

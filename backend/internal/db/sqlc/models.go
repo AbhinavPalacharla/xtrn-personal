@@ -22,6 +22,14 @@ type Chat struct {
 	ID string
 }
 
+type ChatAuthRequest struct {
+	ID                string
+	Status            string
+	OauthProviderName string
+	Foreign           interface{}
+	ChatID            string
+}
+
 type McpServerImage struct {
 	ID            string
 	Slug          string
@@ -102,4 +110,10 @@ type VGetChatMessage struct {
 	ChatID     string
 	AiMessage  query_types.AIParts
 	ToolResult query_types.ToolResult
+}
+
+type VGetChatWithAuthAndMessage struct {
+	ChatID       string
+	AuthRequests query_types.AuthRequests
+	Messages     query_types.ChatMessages
 }

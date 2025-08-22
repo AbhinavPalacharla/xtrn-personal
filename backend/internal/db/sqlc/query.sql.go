@@ -32,6 +32,22 @@ func (q *Queries) DeleteMCPServerInstance(ctx context.Context, id string) error 
 	return err
 }
 
+const getChatWithAuthAndMessages = `-- name: GetChatWithAuthAndMessages :one
+SELECT
+  chat_id, auth_requests, messages
+FROM
+  v_get_chat_with_auth_and_messages
+WHERE
+  chat_id = ?
+`
+
+func (q *Queries) GetChatWithAuthAndMessages(ctx context.Context, chatID string) (VGetChatWithAuthAndMessage, error) {
+	row := q.db.QueryRowContext(ctx, getChatWithAuthAndMessages, chatID)
+	var i VGetChatWithAuthAndMessage
+	err := row.Scan(&i.ChatID, &i.AuthRequests, &i.Messages)
+	return i, err
+}
+
 const getMCPServerImage = `-- name: GetMCPServerImage :one
 SELECT
   images.id, images.slug, images.version, images.name, images.docker_image, images.type, images.oauth_provider, images.env_schema,
@@ -207,6 +223,30 @@ func (q *Queries) InsertAIMessagePart(ctx context.Context, arg InsertAIMessagePa
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertAuthRequest = `-- name: InsertAuthRequest :exec
+INSERT INTO
+  chat_auth_requests (id, status, oauth_provider_name, chat_id)
+VALUES
+  (?, ?, ?, ?)
+`
+
+type InsertAuthRequestParams struct {
+	ID                string
+	Status            string
+	OauthProviderName string
+	ChatID            string
+}
+
+func (q *Queries) InsertAuthRequest(ctx context.Context, arg InsertAuthRequestParams) error {
+	_, err := q.db.ExecContext(ctx, insertAuthRequest,
+		arg.ID,
+		arg.Status,
+		arg.OauthProviderName,
+		arg.ChatID,
+	)
+	return err
 }
 
 const insertChat = `-- name: InsertChat :exec

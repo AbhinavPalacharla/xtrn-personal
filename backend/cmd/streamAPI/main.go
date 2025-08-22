@@ -65,6 +65,11 @@ func CORSMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// func getChat(chatID string) {
+// chat, err := Q.GetChatWithAuthAndMessages(context.Background(), chatID)
+// _ = err
+// }
+
 func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
 	msgHist := []llms.MessageContent{}
 

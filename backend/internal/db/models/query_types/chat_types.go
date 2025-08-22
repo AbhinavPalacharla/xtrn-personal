@@ -6,6 +6,110 @@ import (
 	"fmt"
 )
 
+type OauthProviderInfo struct {
+	Name        string  `json:"name"`
+	ClientID    string  `json:"client_id"`
+	CallbackURL string  `json:"callback_url"`
+	Scopes      *string `json:"scopes,omitempty"`
+}
+
+type AuthRequest struct {
+	ID                string            `json:"id"`
+	Status            string            `json:"status"`
+	OauthProviderName string            `json:"oauth_provider_name"`
+	ProviderInfo      OauthProviderInfo `json:"provider_info"`
+}
+
+type AuthRequests []AuthRequest
+
+// Scan implements sql.Scanner for a JSON TEXT column -> []AuthRequest
+func (a *AuthRequests) Scan(value any) error {
+	switch v := value.(type) {
+	case nil:
+		*a = nil
+		return nil
+	case []byte:
+		if len(v) == 0 {
+			*a = nil
+			return nil
+		}
+		return json.Unmarshal(v, a)
+	case string:
+		if v == "" {
+			*a = nil
+			return nil
+		}
+		return json.Unmarshal([]byte(v), a)
+	default:
+		return fmt.Errorf("AuthRequests.Scan: unsupported src type %T", v)
+	}
+}
+
+// Value implements driver.Valuer so you can INSERT/UPDATE this field if needed.
+func (a AuthRequests) Value() (driver.Value, error) {
+	if a == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(a)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+type ChatMessage struct {
+	ID         string      `json:"id"`
+	Role       string      `json:"role"`
+	Content    *string     `json:"content,omitempty"`
+	StopReason *string     `json:"stop_reason,omitempty"`
+	ChatID     string      `json:"chat_id"`
+	AIMessage  AIParts     `json:"ai_message"`
+	ToolResult *ToolResult `json:"tool_result,omitempty"`
+}
+
+type ChatMessages []ChatMessage
+
+// Scan implements sql.Scanner for a JSON TEXT column -> []ChatMessage
+func (c *ChatMessages) Scan(value any) error {
+	switch v := value.(type) {
+	case nil:
+		*c = nil
+		return nil
+	case []byte:
+		if len(v) == 0 {
+			*c = nil
+			return nil
+		}
+		return json.Unmarshal(v, c)
+	case string:
+		if v == "" {
+			*c = nil
+			return nil
+		}
+		return json.Unmarshal([]byte(v), c)
+	default:
+		return fmt.Errorf("ChatMessages.Scan: unsupported src type %T", v)
+	}
+}
+
+// Value implements driver.Valuer so you can INSERT/UPDATE this field if needed.
+func (c ChatMessages) Value() (driver.Value, error) {
+	if c == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+type ChatWithAuthAndMessages struct {
+	ChatID       string       `json:"chat_id"`
+	AuthRequests AuthRequests `json:"auth_requests"`
+	Messages     ChatMessages `json:"messages"`
+}
+
 type AIPart struct {
 	Type       string          `json:"type"`
 	Index      int             `json:"index"`

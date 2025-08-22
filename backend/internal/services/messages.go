@@ -72,6 +72,54 @@ func CreateHumanMessage(args CreateHumanMessageArgs, Q *db.Queries, ctx context.
 	return nil
 }
 
+type CreateXTRNAuthMessageArgs struct {
+	ChatID            string
+	OAuthProviderName string
+}
+
+func CreateXTRNAuthMessage(args CreateXTRNAuthMessageArgs, Q *db.Queries, ctx context.Context) (err error) {
+	var tx *sql.Tx
+
+	if Q == nil {
+		tx, err = shared.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("Failed to begin tx - %w", err)
+		}
+		defer tx.Rollback()
+
+		Q = shared.Q.WithTx(tx)
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	msgID, _ := gonanoid.New()
+	Q.InsertMessage(ctx, db.InsertMessageParams{
+		ID:         msgID,
+		Role:       "xtrn_auth",
+		Content:    sql.NullString{Valid: false},
+		StopReason: sql.NullString{Valid: false},
+		ChatID:     args.ChatID,
+	})
+
+	authReqID, _ := gonanoid.New()
+	Q.InsertAuthRequest(ctx, db.InsertAuthRequestParams{
+		ID:                authReqID,
+		Status:            "OPEN",
+		OauthProviderName: args.OAuthProviderName,
+		ChatID:            args.ChatID,
+	})
+
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("Failed to commit text part to DB - %w", err)
+		}
+	}
+
+	return nil
+}
+
 type CreateAIMessageArgs struct {
 	ChatID     string
 	StopReason string
@@ -111,7 +159,7 @@ func InsertAITextPart(args InsertAITextPartArgs, Q *db.Queries, ctx context.Cont
 	var tx *sql.Tx
 
 	if Q == nil {
-		tx, err := shared.DB.BeginTx(ctx, nil)
+		tx, err = shared.DB.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("Failed to begin tx - %w", err)
 		}
@@ -245,7 +293,7 @@ func InsertToolCallResult(args InsertToolCallResultArgs, Q *db.Queries, ctx cont
 	}); err != nil {
 		return fmt.Errorf("Failed to insert tool call result message - %w", err)
 	}
-	
+
 	if err := Q.InsertToolCallResult(ctx, db.InsertToolCallResultParams{
 		MessageID:  id,
 		ToolCallID: args.ToolCallID,
