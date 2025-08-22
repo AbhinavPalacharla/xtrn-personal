@@ -166,7 +166,7 @@ func (q *Queries) GetOauthTokenByProvider(ctx context.Context, oauthProvider str
 
 const getViewChatMessges = `-- name: GetViewChatMessges :many
 SELECT
-  id, role, content, stop_reason, chat_id, ai_message, tool_result
+  id, role, content, stop_reason, chat_id, ai_message, tool_result, auth_request
 FROM
   v_get_chat_messages
 WHERE
@@ -191,6 +191,7 @@ func (q *Queries) GetViewChatMessges(ctx context.Context, chatID string) ([]VGet
 			&i.ChatID,
 			&i.AiMessage,
 			&i.ToolResult,
+			&i.AuthRequest,
 		); err != nil {
 			return nil, err
 		}

@@ -103,13 +103,14 @@ type ToolCallResult struct {
 }
 
 type VGetChatMessage struct {
-	ID         string
-	Role       string
-	Content    sql.NullString
-	StopReason sql.NullString
-	ChatID     string
-	AiMessage  query_types.AIParts
-	ToolResult query_types.ToolResult
+	ID          string
+	Role        string
+	Content     sql.NullString
+	StopReason  sql.NullString
+	ChatID      string
+	AiMessage   query_types.AIParts
+	ToolResult  query_types.ToolResult
+	AuthRequest query_types.AuthRequest
 }
 
 type VGetChatWithAuthAndMessage struct {

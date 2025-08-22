@@ -137,7 +137,42 @@ SELECT
       WHERE
         t.message_id = m.id
     )
-  END AS tool_result
+  END AS tool_result,
+  /* auth_request as JSON object for xtrn_auth messages */
+  CASE
+    WHEN m.role = 'xtrn_auth' THEN (
+      SELECT
+        json_object(
+          'id',
+          ar.id,
+          'status',
+          ar.status,
+          'oauth_provider_name',
+          ar.oauth_provider_name,
+          'provider_info',
+          json_object(
+            'name',
+            op.name,
+            'client_id',
+            op.client_id,
+            'callback_url',
+            op.callback_url,
+            'scopes',
+            op.scopes
+          )
+        )
+      FROM
+        chat_auth_requests ar
+      LEFT JOIN oauth_providers op ON ar.oauth_provider_name = op.name
+      WHERE
+        ar.chat_id = m.chat_id
+        AND ar.id = (
+          SELECT id FROM chat_auth_requests
+          WHERE chat_id = m.chat_id
+          ORDER BY id DESC LIMIT 1
+        )
+    )
+  END AS auth_request
 FROM
   messages m;
 

@@ -58,13 +58,14 @@ func (a AuthRequests) Value() (driver.Value, error) {
 }
 
 type ChatMessage struct {
-	ID         string      `json:"id"`
-	Role       string      `json:"role"`
-	Content    *string     `json:"content,omitempty"`
-	StopReason *string     `json:"stop_reason,omitempty"`
-	ChatID     string      `json:"chat_id"`
-	AIMessage  AIParts     `json:"ai_message"`
-	ToolResult *ToolResult `json:"tool_result,omitempty"`
+	ID          string       `json:"id"`
+	Role        string       `json:"role"`
+	Content     *string      `json:"content,omitempty"`
+	StopReason  *string      `json:"stop_reason,omitempty"`
+	ChatID      string       `json:"chat_id"`
+	AIMessage   AIParts      `json:"ai_message"`
+	ToolResult  *ToolResult  `json:"tool_result,omitempty"`
+	AuthRequest *AuthRequest `json:"auth_request,omitempty"`
 }
 
 type ChatMessages []ChatMessage
