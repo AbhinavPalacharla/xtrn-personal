@@ -242,3 +242,94 @@ func (t ToolResult) Value() (driver.Value, error) {
 	}
 	return string(b), nil
 }
+
+type ToolInfo struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	Schema      string  `json:"schema"`
+}
+
+type Tools []ToolInfo
+
+// Scan implements sql.Scanner for a JSON TEXT column -> []ToolInfo
+func (t *Tools) Scan(value any) error {
+	switch v := value.(type) {
+	case nil:
+		*t = nil
+		return nil
+	case []byte:
+		if len(v) == 0 {
+			*t = nil
+			return nil
+		}
+		return json.Unmarshal(v, t)
+	case string:
+		if v == "" {
+			*t = nil
+			return nil
+		}
+		return json.Unmarshal([]byte(v), t)
+	default:
+		return fmt.Errorf("Tools.Scan: unsupported src type %T", v)
+	}
+}
+
+// Value implements driver.Valuer so you can INSERT/UPDATE this field if needed.
+func (t Tools) Value() (driver.Value, error) {
+	if t == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(t)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+type OauthInfo struct {
+	ProviderName string  `json:"providerName"`
+	ClientID     string  `json:"clientID"`
+	ClientSecret string  `json:"clientSecret"`
+	CallbackURL  string  `json:"callbackURL"`
+	Scopes       *string `json:"scopes,omitempty"`
+}
+
+// Scan implements sql.Scanner for a JSON TEXT column -> OauthInfo
+func (o *OauthInfo) Scan(value any) error {
+	switch v := value.(type) {
+	case nil:
+		*o = OauthInfo{}
+		return nil
+	case []byte:
+		if len(v) == 0 {
+			*o = OauthInfo{}
+			return nil
+		}
+		return json.Unmarshal(v, o)
+	case string:
+		if v == "" {
+			*o = OauthInfo{}
+			return nil
+		}
+		return json.Unmarshal([]byte(v), o)
+	default:
+		return fmt.Errorf("OauthInfo.Scan: unsupported src type %T", v)
+	}
+}
+
+// Value implements driver.Valuer so you can INSERT/UPDATE this field if needed.
+func (o OauthInfo) Value() (driver.Value, error) {
+	b, err := json.Marshal(o)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+type OauthInstanceWithTools struct {
+	InstanceID string     `json:"instance_id"`
+	Slug       string     `json:"slug"`
+	Address    string     `json:"address"`
+	Tools      Tools      `json:"tools"`
+	Oauth      *OauthInfo `json:"oauth,omitempty"`
+}

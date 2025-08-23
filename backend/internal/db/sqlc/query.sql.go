@@ -148,6 +148,43 @@ func (q *Queries) GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInst
 	return items, nil
 }
 
+const getOauthInstancesWithTools = `-- name: GetOauthInstancesWithTools :many
+SELECT
+  instance_id, slug, address, tools, oauth
+FROM
+  v_get_oauth_instances_with_tools
+`
+
+// *********************************
+func (q *Queries) GetOauthInstancesWithTools(ctx context.Context) ([]VGetOauthInstancesWithTool, error) {
+	rows, err := q.db.QueryContext(ctx, getOauthInstancesWithTools)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VGetOauthInstancesWithTool
+	for rows.Next() {
+		var i VGetOauthInstancesWithTool
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.Slug,
+			&i.Address,
+			&i.Tools,
+			&i.Oauth,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOauthTokenByProvider = `-- name: GetOauthTokenByProvider :one
 SELECT
   id, refresh_token, oauth_provider

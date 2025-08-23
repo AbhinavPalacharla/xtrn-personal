@@ -14,6 +14,8 @@ type Querier interface {
 	GetChatWithAuthAndMessages(ctx context.Context, chatID string) (VGetChatWithAuthAndMessage, error)
 	GetMCPServerImage(ctx context.Context, id string) (GetMCPServerImageRow, error)
 	GetMCPServerInstances(ctx context.Context) ([]GetMCPServerInstancesRow, error)
+	//*********************************
+	GetOauthInstancesWithTools(ctx context.Context) ([]VGetOauthInstancesWithTool, error)
 	GetOauthTokenByProvider(ctx context.Context, oauthProvider string) (OauthToken, error)
 	//*********************************
 	GetViewChatMessges(ctx context.Context, chatID string) ([]VGetChatMessage, error)

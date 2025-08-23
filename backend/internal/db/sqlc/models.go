@@ -118,3 +118,11 @@ type VGetChatWithAuthAndMessage struct {
 	AuthRequests query_types.AuthRequests
 	Messages     query_types.ChatMessages
 }
+
+type VGetOauthInstancesWithTool struct {
+	InstanceID string
+	Slug       string
+	Address    string
+	Tools      query_types.Tools
+	Oauth      query_types.OauthInfo
+}

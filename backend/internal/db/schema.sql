@@ -310,3 +310,47 @@ CREATE TABLE mcp_server_instances (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (slug, version) REFERENCES mcp_server_images (slug, version)
 );
+
+/****************************************************/
+/*
+View for OAuth instances with tools
+*/
+CREATE VIEW v_get_oauth_instances_with_tools AS
+SELECT
+  inst.id AS instance_id,
+  inst.slug,
+  inst.address,
+  -- Aggregate tools as JSON array
+  COALESCE(
+    (
+      SELECT
+        json_group_array(
+          json_object(
+            'name', tool.name,
+            'description', tool.description,
+            'schema', tool.schema
+          )
+        )
+      FROM
+        mcp_server_tools tool
+      WHERE
+        tool.image_id = img.id
+    ),
+    '[]'
+  ) AS tools,
+  -- OAuth info if applicable
+  CASE
+    WHEN img.type = 'AUTHENTICATED_OAUTH' THEN json_object(
+      'providerName', op.name,
+      'clientID', op.client_id,
+      'clientSecret', op.client_secret,
+      'callbackURL', op.callback_url,
+      'scopes', op.scopes
+    )
+    ELSE NULL
+  END AS oauth
+FROM
+  oauth_tokens ot
+  JOIN oauth_providers op ON ot.oauth_provider = op.name
+  JOIN mcp_server_images img ON img.oauth_provider = op.name
+  JOIN mcp_server_instances inst ON inst.slug = img.slug AND inst.version = img.version;

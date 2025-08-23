@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/AbhinavPalacharla/xtrn-personal/internal/db/models/query_types"
 	"github.com/AbhinavPalacharla/xtrn-personal/internal/services"
 	. "github.com/AbhinavPalacharla/xtrn-personal/internal/shared"
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -35,7 +36,6 @@ func NewApp() (*App, error) {
 	a.Mux.HandleFunc("/chats", CORSMiddleware(a.handleChat))                   // SEND MESSAGE
 	a.Mux.HandleFunc("/chats/{chatID}/messages", CORSMiddleware(a.handleChat)) // SEND MESSAGE
 	a.Mux.HandleFunc("/messages/{chatID}", a.handleGetChatMessages)            // GET MESSAGE HISTORY
-	a.Mux.HandleFunc("/hello", CORSMiddleware(a.helloHandler))
 
 	if listener, err := net.Listen("tcp", ":8080"); err != nil {
 		return nil, err
@@ -64,11 +64,6 @@ func CORSMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		next(w, r)
 	}
 }
-
-// func getChat(chatID string) {
-// chat, err := Q.GetChatWithAuthAndMessages(context.Background(), chatID)
-// _ = err
-// }
 
 func getMessageHistory(chatID string) ([]llms.MessageContent, error) {
 	msgHist := []llms.MessageContent{}
@@ -180,6 +175,15 @@ type Message struct {
 	Content string `json:"content"`
 }
 
+type VercelRequest struct {
+	Message struct {
+		Parts []struct {
+			Type string `json:"type"`
+			Text string `json:"text,omitempty"`
+		} `json:"parts"`
+	} `json:"message"`
+}
+
 type MCPInstanceTool struct {
 	Name        string
 	Description string
@@ -193,65 +197,55 @@ type ChatMCPInstance struct {
 	Tools   []MCPInstanceTool
 }
 
-func getMCPTools() ([]llms.Tool, map[string]string, error) {
-	// Fetch MCP instance tools
-	instanceRows, err := Q.GetMCPServerInstances(context.Background())
-
+func getMCPInstancesWithOAuth() (tools []llms.Tool, instSlugToAddress map[string]string, instSlugToOauth map[string]*query_types.OauthInfo, err error) {
+	// Fetch MCP instance tools with OAuth info
+	instanceRows, err := Q.GetOauthInstancesWithTools(context.Background())
 	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to get MPC instances - %w", err)
+		return nil, nil, nil, fmt.Errorf("Failed to get OAuth instances with tools - %w", err)
 	}
 
-	instances := map[string]*ChatMCPInstance{}
+	ViewObjectAsJSON("OAUTH INSTANCES WITH TOOLS", instanceRows, nil)
 
-	for _, i := range instanceRows {
+	tools = []llms.Tool{}
+	instanceToAddr := map[string]string{}
+	instanceToOauth := map[string]*query_types.OauthInfo{}
 
-		inst, ok := instances[i.InstanceID]
-		if !ok {
-			inst = &ChatMCPInstance{
-				ID:      i.InstanceID,
-				Address: i.Address,
-				ImgID:   i.ImageID.String,
-				Tools:   []MCPInstanceTool{},
-			}
-			ok = true
-			instances[i.InstanceID] = inst
+	for _, inst := range instanceRows {
+		// Map instance slug to address
+		instanceToAddr[inst.Slug] = inst.Address
+
+		// Map instance slug to OAuth info (if available)
+		if inst.Oauth.ProviderName != "" {
+			instanceToOauth[inst.Slug] = &inst.Oauth
 		}
 
-		if ok {
-			schema := map[string]any{}
-			json.Unmarshal([]byte(i.ToolSchema.String), &schema)
-
-			inst.Tools = append(inst.Tools, MCPInstanceTool{
-				Name:        i.ToolName.String,
-				Description: i.ToolDesc.String,
-				InputSchema: schema,
-			})
-		}
-	}
-
-	ViewObjectAsJSON("MCP INSTANCES", instances, nil)
-
-	tools := []llms.Tool{}
-	toolToAddr := map[string]string{}
-
-	for _, inst := range instances {
+		// Format tools for LLM
 		for _, tool := range inst.Tools {
-			toolName := inst.ID + "___" + tool.Name
+			toolName := inst.InstanceID + "___" + tool.Name
 
-			toolToAddr[toolName] = inst.Address
+			// Parse tool schema
+			var schema map[string]any
+			if err := json.Unmarshal([]byte(tool.Schema), &schema); err != nil {
+				return nil, nil, nil, fmt.Errorf("Failed to parse tool schema for %s - %w", tool.Name, err)
+			}
 
 			tools = append(tools, llms.Tool{
 				Type: "function",
 				Function: &llms.FunctionDefinition{
-					Name:        toolName,
-					Description: tool.Description,
-					Parameters:  tool.InputSchema,
+					Name: toolName,
+					Description: func() string {
+						if tool.Description != nil {
+							return *tool.Description
+						}
+						return ""
+					}(),
+					Parameters: schema,
 				},
 			})
 		}
 	}
 
-	return tools, toolToAddr, nil
+	return tools, instanceToAddr, instanceToOauth, nil
 }
 
 func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -326,14 +320,16 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tools, toolToAddr, err := getMCPTools()
-	if err != nil {
-		HTTPReturnError(w, ErrorOptions{
-			Err: err.Error(),
-		})
-		app.ErrLogger.Print(err)
-	}
-	_ = toolToAddr
+	// tools, toolToAddr, err := getMCPTools()
+	// if err != nil {
+	// 	HTTPReturnError(w, ErrorOptions{
+	// 		Err: err.Error(),
+	// 	})
+	// 	app.ErrLogger.Print(err)
+	// }
+	// _ = toolToAddr
+
+	tools, instToAddr, instToOauth, err := getMCPInstancesWithOAuth()
 
 	openAIKey, err := GetEnv("OPENAI_KEY")
 	if err != nil {
@@ -393,7 +389,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 			break // No tools needed so end conversation loop and wait for user to send next message
 		}
 
-		msgHist, err = execToolCalls(w, chatID, msgHist, resp, toolToAddr)
+		msgHist, err = execToolCalls(w, chatID, msgHist, resp, instToAddr, instToOauth)
 		if err != nil {
 			HTTPReturnError(w, ErrorOptions{
 				Err: fmt.Errorf("Failed to save execute tool call - %w", err).Error(),
@@ -534,7 +530,7 @@ type ToolCallResult struct {
 	IsError bool `json:"is_error"`
 }
 
-func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageContent, resp *llms.ContentResponse, toolToAddr map[string]string) ([]llms.MessageContent, error) {
+func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageContent, resp *llms.ContentResponse, instToAddr map[string]string, instToOauth map[string]*query_types.OauthInfo) ([]llms.MessageContent, error) {
 	if resp == nil || len(resp.Choices) == 0 || resp.Choices[0].ToolCalls == nil {
 		return msgHist, nil
 	}
@@ -542,7 +538,8 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 	fmt.Println("Executing", len(resp.Choices[0].ToolCalls), "tool calls")
 
 	for _, tc := range resp.Choices[0].ToolCalls {
-		addr := toolToAddr[tc.FunctionCall.Name]
+		fnParts := strings.Split(tc.FunctionCall.Name, "___")
+		mcpInstanceSlug, funcName := fnParts[0], fnParts[1]
 
 		// PREPARE TC REQUEST
 		var args map[string]any
@@ -550,10 +547,7 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 
 		payload := ToolCallRequest{
 			ToolUseID: tc.ID,
-			Name: func() string {
-				funcName := strings.Split(tc.FunctionCall.Name, "___")
-				return funcName[1]
-			}(),
+			Name:      funcName,
 			Arguments: args,
 		}
 
@@ -562,7 +556,7 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 		ViewObjectAsJSON("REQUEST PAYLOAD", payload, nil)
 
 		// SEND TC REQUEST
-		res, err := http.Post(addr+"/callTool", "application/json", bytes.NewBuffer(payloadJSONb))
+		res, err := http.Post(instToAddr[mcpInstanceSlug]+"/callTool", "application/json", bytes.NewBuffer(payloadJSONb))
 		if err != nil {
 			return nil, fmt.Errorf("Failed to make request to /callTool - %w", err)
 		}
@@ -590,9 +584,6 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 				},
 			})
 
-			ts := strings.Split(tc.FunctionCall.Name, "___")
-			mcpImageName := ts[0]
-
 			authReqID, _ := gonanoid.New()
 
 			// System message (auth req open)
@@ -600,7 +591,7 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 				Role: llms.ChatMessageTypeSystem,
 				Parts: []llms.ContentPart{
 					llms.TextPart(
-						fmt.Sprintf("[AUTH_REQUEST_ID: %s | STATUS: OPEN] Tools for MCP %s have been disabled until the user has re-authenticated", authReqID, mcpImageName),
+						fmt.Sprintf("[AUTH_REQUEST_ID: %s | STATUS: OPEN] Tools for MCP %s have been disabled until the user has re-authenticated", authReqID, mcpInstanceSlug),
 					),
 				},
 			})
@@ -624,14 +615,14 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 			// System message
 			services.CreateSystemMessage(services.CreateSystemMessageArgs{
 				ChatID:  chatID,
-				Content: fmt.Sprintf("[AUTH_REQUEST_ID: %s | STATUS: OPEN] Tools for MCP %s have been disabled until the user has re-authenticated", authReqID, mcpImageName),
+				Content: fmt.Sprintf("[AUTH_REQUEST_ID: %s | STATUS: OPEN] Tools for MCP %s have been disabled until the user has re-authenticated", authReqID, mcpInstanceSlug),
 			}, qtx, ctx)
 
 			// Auth request message
 			services.CreateAuthMessage(services.CreateXTRNAuthMessageArgs{
 				ChatID:            chatID,
 				AuthRequestID:     authReqID,
-				OAuthProviderName: "google-calendar", //TODO: Get oauth provider dynamically
+				OAuthProviderName: instToOauth[mcpInstanceSlug].ProviderName,
 			}, qtx, ctx)
 
 			if err := tx.Commit(); err != nil {
@@ -640,7 +631,11 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 
 			// SEND AUTH REQUEST
 			fmt.Println("SENDING AUTH REQUEST")
-			if err := sendAuthRequest("google-calendar", "http://localhost:8080/auth/google-calendar", w); err != nil {
+			if err := sendAuthRequest(
+				instToOauth[mcpInstanceSlug].ProviderName,
+				fmt.Sprintf("http://localhost:8080/auth/%s", instToOauth[mcpInstanceSlug].ProviderName),
+				w,
+			); err != nil {
 				fmt.Printf("ERROR SENDING AUTH REQUEST: %v\n", err)
 			}
 
@@ -936,67 +931,4 @@ func sendAuthRequest(providerName string, authURL string, w http.ResponseWriter)
 	flusher.Flush()
 
 	return nil
-}
-
-type VercelRequest struct {
-	Message struct {
-		Parts []struct {
-			Type string `json:"type"`
-			Text string `json:"text,omitempty"`
-		} `json:"parts"`
-	} `json:"message"`
-}
-
-func (app *App) helloHandler(w http.ResponseWriter, r *http.Request) {
-	//CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		HTTPReturnError(w, ErrorOptions{
-			Err: fmt.Errorf("Failed to read request body - %w", err).Error(),
-		})
-		app.ErrLogger.Print(err)
-	}
-	defer r.Body.Close()
-
-	ViewObjectAsJSON("RAW MESSAGE", bodyBytes, nil)
-
-	var req VercelRequest
-	json.Unmarshal(bodyBytes, &req)
-
-	ViewObjectAsJSON("VERCEL REQUEST", req, nil)
-
-	if req.Message.Parts == nil {
-		return
-	}
-
-	if err := sendMessageStart(w); err != nil {
-		fmt.Printf("Failed to send message start - %v\n", err)
-	}
-
-	if err := sendText("ping pong", w); err != nil {
-		fmt.Printf("Failed to send text - %v\n", err)
-	}
-
-	toolCallID := "toolcall123"
-
-	if err := sendToolCallRequest(toolCallID, "Some Tool", "hello123", w); err != nil {
-		fmt.Printf("Failed to send tool call request - %v\n", err)
-	}
-
-	if err := sendToolCallResponse(toolCallID, "HELLO 123", w); err != nil {
-		fmt.Printf("Failed to send tool call response - %v\n", err)
-	}
-
-	if err := sendMessageEnd(w); err != nil {
-		fmt.Printf("Failed to send message end - %v\n", err)
-	}
-
-	if err := sendStreamTerminate(w); err != nil {
-		fmt.Printf("Failed to send stream terminate - %v\n", err)
-	}
 }

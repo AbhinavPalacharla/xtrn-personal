@@ -166,3 +166,10 @@ FROM
   v_get_chat_with_auth_and_messages
 WHERE
   chat_id = ?;
+
+/***********************************/
+-- name: GetOauthInstancesWithTools :many
+SELECT
+  *
+FROM
+  v_get_oauth_instances_with_tools;
