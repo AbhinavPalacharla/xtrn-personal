@@ -140,7 +140,7 @@ SELECT
   END AS tool_result,
   /* auth_request as JSON object for xtrn_auth messages */
   CASE
-    WHEN m.role = 'xtrn_auth' THEN (
+    WHEN m.role = 'xtrn_auth' THEN COALESCE((
       SELECT
         json_object(
           'id',
@@ -163,15 +163,22 @@ SELECT
         )
       FROM
         chat_auth_requests ar
-      LEFT JOIN oauth_providers op ON ar.oauth_provider_name = op.name
+        LEFT JOIN oauth_providers op ON ar.oauth_provider_name = op.name
       WHERE
         ar.chat_id = m.chat_id
         AND ar.id = (
-          SELECT id FROM chat_auth_requests
-          WHERE chat_id = m.chat_id
-          ORDER BY id DESC LIMIT 1
+          SELECT
+            id
+          FROM
+            chat_auth_requests
+          WHERE
+            chat_id = m.chat_id
+          ORDER BY
+            id DESC
+          LIMIT
+            1
         )
-    )
+    ), NULL)
   END AS auth_request
 FROM
   messages m;
@@ -179,48 +186,69 @@ FROM
 -- New view to get chat with auth requests and messages
 CREATE VIEW v_get_chat_with_auth_and_messages AS
 SELECT
-    c.id AS chat_id,
-    -- Aggregate auth requests as JSON array with provider info
-    COALESCE(
-        (
-            SELECT json_group_array(
-                json_object(
-                    'id', car.id,
-                    'status', car.status,
-                    'oauth_provider_name', car.oauth_provider_name,
-                    'provider_info', json_object(
-                        'name', op.name,
-                        'client_id', op.client_id,
-                        'callback_url', op.callback_url,
-                        'scopes', op.scopes
-                    )
-                )
+  c.id AS chat_id,
+  -- Aggregate auth requests as JSON array with provider info
+  COALESCE(
+    (
+      SELECT
+        json_group_array(
+          json_object(
+            'id',
+            car.id,
+            'status',
+            car.status,
+            'oauth_provider_name',
+            car.oauth_provider_name,
+            'provider_info',
+            json_object(
+              'name',
+              op.name,
+              'client_id',
+              op.client_id,
+              'callback_url',
+              op.callback_url,
+              'scopes',
+              op.scopes
             )
-            FROM chat_auth_requests car
-            LEFT JOIN oauth_providers op ON car.oauth_provider_name = op.name
-            WHERE car.chat_id = c.id
-        ),
-        '[]'
-    ) AS auth_requests,
-    -- Aggregate messages from v_get_chat_messages as JSON array
-    COALESCE(
-        (
-            SELECT json_group_array(
-                json_object(
-                    'id', v.id,
-                    'role', v.role,
-                    'content', v.content,
-                    'stop_reason', v.stop_reason,
-                    'ai_message', v.ai_message,
-                    'tool_result', v.tool_result
-                )
-            )
-            FROM v_get_chat_messages v
-            WHERE v.chat_id = c.id
-        ),
-        '[]'
-    ) AS messages
-FROM chats c;
+          )
+        )
+      FROM
+        chat_auth_requests car
+        LEFT JOIN oauth_providers op ON car.oauth_provider_name = op.name
+      WHERE
+        car.chat_id = c.id
+    ),
+    '[]'
+  ) AS auth_requests,
+  -- Aggregate messages from v_get_chat_messages as JSON array
+  COALESCE(
+    (
+      SELECT
+        json_group_array(
+          json_object(
+            'id',
+            v.id,
+            'role',
+            v.role,
+            'content',
+            v.content,
+            'stop_reason',
+            v.stop_reason,
+            'ai_message',
+            v.ai_message,
+            'tool_result',
+            v.tool_result
+          )
+        )
+      FROM
+        v_get_chat_messages v
+      WHERE
+        v.chat_id = c.id
+    ),
+    '[]'
+  ) AS messages
+FROM
+  chats c;
 
 /****************************************************/
 /*

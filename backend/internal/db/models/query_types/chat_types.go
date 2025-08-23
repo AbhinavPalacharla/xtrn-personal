@@ -20,6 +20,38 @@ type AuthRequest struct {
 	ProviderInfo      OauthProviderInfo `json:"provider_info"`
 }
 
+// Scan implements sql.Scanner for a JSON TEXT column -> AuthRequest
+func (a *AuthRequest) Scan(value any) error {
+	switch v := value.(type) {
+	case nil:
+		*a = AuthRequest{}
+		return nil
+	case []byte:
+		if len(v) == 0 {
+			*a = AuthRequest{}
+			return nil
+		}
+		return json.Unmarshal(v, a)
+	case string:
+		if v == "" {
+			*a = AuthRequest{}
+			return nil
+		}
+		return json.Unmarshal([]byte(v), a)
+	default:
+		return fmt.Errorf("AuthRequest.Scan: unsupported src type %T", v)
+	}
+}
+
+// Value implements driver.Valuer so you can INSERT/UPDATE this field if needed.
+func (a AuthRequest) Value() (driver.Value, error) {
+	b, err := json.Marshal(a)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
 type AuthRequests []AuthRequest
 
 // Scan implements sql.Scanner for a JSON TEXT column -> []AuthRequest

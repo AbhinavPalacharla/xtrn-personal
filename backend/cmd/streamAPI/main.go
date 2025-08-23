@@ -368,6 +368,7 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 			Err: fmt.Errorf("Failed to get response from LLM - %w", err).Error(),
 		})
 		app.ErrLogger.Print(err)
+		return
 	}
 
 	fmt.Println("LLM RESPONSE SUCCEEDED")
@@ -430,6 +431,9 @@ func (app *App) handleChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateMessageHistory(w http.ResponseWriter, ctx context.Context, chatID string, messageHistory []llms.MessageContent, resp *llms.ContentResponse) ([]llms.MessageContent, error) {
+	if resp == nil || len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("invalid LLM response: nil or empty choices")
+	}
 	respchoice := resp.Choices[0]
 
 	fmtResp := llms.MessageContent{
@@ -493,15 +497,17 @@ func updateMessageHistory(w http.ResponseWriter, ctx context.Context, chatID str
 	fmt.Println("INSERTING TOOL CALL REQ PARTS")
 
 	// Tool Call parts
-	for i, tc := range respchoice.ToolCalls {
-		if err := services.InsertAIToolCallRequestPart(services.InsertAIToolCallRequestPartArgs{
-			AIMessageID: msgID,
-			ToolCallID:  tc.ID,
-			ToolName:    tc.FunctionCall.Name,
-			Arguments:   tc.FunctionCall.Arguments,
-			PartIndex:   int64(i + 1),
-		}, qtx, ctx); err != nil {
-			return nil, fmt.Errorf("Failed to tool call req part - %w", err)
+	if respchoice.ToolCalls != nil {
+		for i, tc := range respchoice.ToolCalls {
+			if err := services.InsertAIToolCallRequestPart(services.InsertAIToolCallRequestPartArgs{
+				AIMessageID: msgID,
+				ToolCallID:  tc.ID,
+				ToolName:    tc.FunctionCall.Name,
+				Arguments:   tc.FunctionCall.Arguments,
+				PartIndex:   int64(i + 1),
+			}, qtx, ctx); err != nil {
+				return nil, fmt.Errorf("Failed to tool call req part - %w", err)
+			}
 		}
 	}
 
@@ -529,6 +535,10 @@ type ToolCallResult struct {
 }
 
 func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageContent, resp *llms.ContentResponse, toolToAddr map[string]string) ([]llms.MessageContent, error) {
+	if resp == nil || len(resp.Choices) == 0 || resp.Choices[0].ToolCalls == nil {
+		return msgHist, nil
+	}
+
 	fmt.Println("Executing", len(resp.Choices[0].ToolCalls), "tool calls")
 
 	for _, tc := range resp.Choices[0].ToolCalls {
@@ -559,6 +569,7 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 		defer res.Body.Close()
 
 		if res.StatusCode == http.StatusUnauthorized {
+			fmt.Printf("TOOL CALL EXECUTION UNAUTHORIZED\n")
 			// IF RESPONSE HTTP TYPE is 401 then that means the user is needs to re-authenticate.
 			/*
 				Delete user Oauth tokens in DB
@@ -566,6 +577,7 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 				Send request to user to re-authenticate (stream JSON object)
 			*/
 
+			/********** LOCAL MESSAGE HISTORY **********/
 			// Tool Response
 			msgHist = append(msgHist, llms.MessageContent{
 				Role: llms.ChatMessageTypeTool,
@@ -579,40 +591,66 @@ func execToolCalls(w http.ResponseWriter, chatID string, msgHist []llms.MessageC
 			})
 
 			ts := strings.Split(tc.FunctionCall.Name, "___")
-			mcp := ts[0]
+			mcpImageName := ts[0]
 
-			// System message
+			authReqID, _ := gonanoid.New()
+
+			// System message (auth req open)
 			msgHist = append(msgHist, llms.MessageContent{
 				Role: llms.ChatMessageTypeSystem,
 				Parts: []llms.ContentPart{
 					llms.TextPart(
-						fmt.Sprintf("Tools for the MCP instance `%s` have been disabled. Do not call these functions as they will not work. When the user has re-authenticated you will be notified and can use the tools.", mcp),
+						fmt.Sprintf("[AUTH_REQUEST_ID: %s | STATUS: OPEN] Tools for MCP %s have been disabled until the user has re-authenticated", authReqID, mcpImageName),
 					),
 				},
 			})
+
+			/********** DB MESSAGE HISTORY **********/
 
 			ctx := context.Background()
 			tx, _ := DB.BeginTx(ctx, nil)
 			defer tx.Rollback()
 			qtx := Q.WithTx(tx)
 
+			// Tool call result
 			services.InsertToolCallResult(services.InsertToolCallResultArgs{
 				ChatID:        chatID,
 				ToolCallID:    tc.ID,
 				ToolName:      tc.FunctionCall.Name,
-				ResultContent: tc.FunctionCall.Arguments,
+				ResultContent: "Function could not be executed because user is unauthorized. User must re-authenticate to continue.",
 				IsError:       true,
 			}, qtx, ctx)
 
-			// Add system message for auth error
+			// System message
 			services.CreateSystemMessage(services.CreateSystemMessageArgs{
 				ChatID:  chatID,
-				Content: fmt.Sprintf("Tools for the MCP instance `%s` have been disabled. Do not call these functions as they will not work. When the user has re-authenticated you will be notified and can use the tools.", mcp),
+				Content: fmt.Sprintf("[AUTH_REQUEST_ID: %s | STATUS: OPEN] Tools for MCP %s have been disabled until the user has re-authenticated", authReqID, mcpImageName),
+			}, qtx, ctx)
+
+			// Auth request message
+			services.CreateAuthMessage(services.CreateXTRNAuthMessageArgs{
+				ChatID:            chatID,
+				AuthRequestID:     authReqID,
+				OAuthProviderName: "google-calendar", //TODO: Get oauth provider dynamically
 			}, qtx, ctx)
 
 			if err := tx.Commit(); err != nil {
 				return nil, err
 			}
+
+			// SEND AUTH REQUEST
+			fmt.Println("SENDING AUTH REQUEST")
+			if err := sendAuthRequest("google-calendar", "http://localhost:8080/auth/google-calendar", w); err != nil {
+				fmt.Printf("ERROR SENDING AUTH REQUEST: %v\n", err)
+			}
+
+			/**
+				NOTE: DO NOT SEND TOOL CALL RESPONSE IF TOOL CALL FAILS FOR UNAUTHORIZED REASON
+
+				SEND AN AUTH REQUEST
+
+				THEN LET THE LLM RESPOND TELLING THE USER THEY NEED TO RE-AUTHENTICATE
+			**/
 		} else {
 
 			body, err := io.ReadAll(res.Body)
@@ -867,6 +905,31 @@ func sendToolCallResponse(toolCallID string, output any, w http.ResponseWriter) 
 
 	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(toolCallOutputJSONb)); err != nil {
 		return fmt.Errorf("Failed to write tool output %s - %w", toolCallID, err)
+	}
+
+	flusher, _ := w.(http.Flusher)
+	flusher.Flush()
+
+	return nil
+}
+
+// Only used to stream. Not used when loading chat history so status will always be OPEN
+func sendAuthRequest(providerName string, authURL string, w http.ResponseWriter) error {
+	authRequest := struct {
+		Type string         `json:"type"`
+		Data map[string]any `json:"data"`
+	}{
+		Type: "data-auth-request",
+		Data: map[string]any{
+			"provider":          providerName,
+			"authorization_url": authURL,
+		},
+	}
+
+	authRequestJSONb, _ := json.Marshal(authRequest)
+
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(authRequestJSONb)); err != nil {
+		return fmt.Errorf("Failed to write auth request - %w", err)
 	}
 
 	flusher, _ := w.(http.Flusher)

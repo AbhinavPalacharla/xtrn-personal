@@ -74,10 +74,11 @@ func CreateHumanMessage(args CreateHumanMessageArgs, Q *db.Queries, ctx context.
 
 type CreateXTRNAuthMessageArgs struct {
 	ChatID            string
+	AuthRequestID     string
 	OAuthProviderName string
 }
 
-func CreateXTRNAuthMessage(args CreateXTRNAuthMessageArgs, Q *db.Queries, ctx context.Context) (err error) {
+func CreateAuthMessage(args CreateXTRNAuthMessageArgs, Q *db.Queries, ctx context.Context) (err error) {
 	var tx *sql.Tx
 
 	if Q == nil {
@@ -103,9 +104,8 @@ func CreateXTRNAuthMessage(args CreateXTRNAuthMessageArgs, Q *db.Queries, ctx co
 		ChatID:     args.ChatID,
 	})
 
-	authReqID, _ := gonanoid.New()
 	Q.InsertAuthRequest(ctx, db.InsertAuthRequestParams{
-		ID:                authReqID,
+		ID:                args.AuthRequestID,
 		Status:            "OPEN",
 		OauthProviderName: args.OAuthProviderName,
 		ChatID:            args.ChatID,
